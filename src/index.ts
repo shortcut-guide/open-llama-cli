@@ -53,7 +53,10 @@ async function main(): Promise<void> {
 注意: 複数のファイルを変更する場合は、このブロックを複数回出力してください。
 `;
 
-  const rl = readline.createInterface({ input, output });
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
 
   printBanner();
   printWorkspaceInfo(config.WORKSPACE_ROOT);
@@ -67,12 +70,14 @@ async function main(): Promise<void> {
     if (!userInput.trim()) continue;
 
     // ─── /agent コマンド: Multi-Agent Orchestrator ───────────────
-    if (userInput.trim().startsWith('/agent ')) {
-      const task = userInput.trim().slice(7).trim();
-      if (!task) {
-        console.log(chalk.red('  使用法: /agent <タスク内容>'));
+    if (userInput.trim().startsWith('/agent')) {
+      const task = await readMultiline(rl);
+
+      if (!task.trim()) {
+        console.log("空です");
         continue;
       }
+
       try {
         const result = await runOrchestrator(task);
         // Orchestratorの最終コードをhistoryに追記してファイルブロック処理
@@ -112,6 +117,23 @@ async function main(): Promise<void> {
       console.error(chalk.red(`\n❌ LLMエラー: ${(e as Error).message}\n`));
     }
   }
+}
+
+async function readMultiline(rl: readline.Interface): Promise<string> {
+  return new Promise((resolve) => {
+    console.log("📝 複数行入力モード（/endで送信）");
+
+    let lines: string[] = [];
+
+    rl.on("line", (line) => {
+      if (line.trim() === "/end") {
+        rl.removeAllListeners("line");
+        resolve(lines.join("\n"));
+      } else {
+        lines.push(line);
+      }
+    });
+  });
 }
 
 main().catch((e) => {

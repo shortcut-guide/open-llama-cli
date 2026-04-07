@@ -30,6 +30,18 @@ function classifyTask(userTask: string): 'simple' | 'code' {
   return codeKeywords.some((kw) => lower.includes(kw)) ? 'code' : 'simple';
 }
 
+function isGarbageCode(code: string): boolean {
+  if (!code) return true;
+
+  return (
+    code.length < 80 || // 短すぎ
+    code.includes("processInput") ||
+    code.includes("validateInput") ||
+    code.includes("main()") ||
+    !code.includes("file:") // フォーマット違反
+  );
+}
+
 export async function runOrchestrator(userTask: string): Promise<OrchestratorResult> {
   const config = getConfig();
   const mode = classifyTask(userTask);
@@ -53,6 +65,17 @@ export async function runOrchestrator(userTask: string): Promise<OrchestratorRes
   const coderResult = await runCoderAgent(ctx);
   ctx.code = coderResult.output;
 
+  if (isGarbageCode(ctx.code)) {
+    console.log("⚠️ ダミーコード検知 → 再生成");
+
+    const retry = await runCoderAgent({
+      ...ctx,
+      userTask: ctx.userTask + "\n\n具体的な実装をしろ。ダミーコード禁止。"
+    });
+
+    ctx.code = retry.output;
+  }
+
   // ─── Step 3: Review → Fix loop ────────────────────────────────
   let approved = false;
   let finalCode = ctx.code;
@@ -62,6 +85,12 @@ export async function runOrchestrator(userTask: string): Promise<OrchestratorRes
 
     const reviewerResult = await runReviewerAgent(ctx);
     const review = parseReviewResult(reviewerResult.output);
+
+    // fallback
+    if (!review.priority_fixes) {
+      review.priority_fixes = review.issues.slice(0, 3);
+    }
+
     ctx.reviewResult = review;
 
     if (review.approved) {
@@ -72,9 +101,21 @@ export async function runOrchestrator(userTask: string): Promise<OrchestratorRes
 
     if (i < config.MAX_REVIEW_ITERATIONS - 1) {
       // Fixer で修正
+      ctx.priorityFixes = review.priority_fixes;
       const fixerResult = await runFixerAgent(ctx);
       ctx.fixedCode = fixerResult.output;
       finalCode = fixerResult.output;
+
+      if (isGarbageCode(finalCode)) {
+        console.log("⚠️ 修正後もダミー → 再生成");
+
+        const retry = await runCoderAgent({
+          ...ctx,
+          userTask: ctx.userTask + "\n\n必ず実用的なコードを出せ。ダミー禁止。"
+        });
+
+        finalCode = retry.output;
+      }
     } else {
       // 最大イテレーション到達
       console.log(

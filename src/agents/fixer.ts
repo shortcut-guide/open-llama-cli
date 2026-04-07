@@ -3,22 +3,19 @@ import chalk from 'chalk';
 import { callLLM, type Message } from '../model/llm.js';
 import type { AgentContext, AgentResult } from './types.js';
 
-const FIXER_SYSTEM_PROMPT = `あなたはデバッグの専門家です。
-Reviewerが指摘した問題点を修正し、改善されたコードを出力します。
+const FIXER_SYSTEM_PROMPT = `あなたはバグ修正専門エンジニアです。
 
-【修正ルール】
-- Reviewerの指摘を全て対応する
-- 修正以外の箇所は変更しない
-- 修正理由をコメントで明記する
+【ルール】
+- priority_fixes のみ修正する
+- 不要な変更は禁止
+- 設計は変えない
+- 最小修正で動作させる
 
 【出力形式】
-修正後のファイルを必ず以下の形式で出力：
-
-\`\`\`file:パス/ファイル名.ts
-// 修正後の完全なコード（省略なし）
+\`\`\`file:filename.ts
+<修正済みコード>
 \`\`\`
-
-複数ファイルがある場合は繰り返して出力してください。`;
+`;
 
 export async function runFixerAgent(ctx: AgentContext): Promise<AgentResult> {
   console.log(chalk.bold.red('\n╔══════════════════════════════════════╗'));
@@ -29,7 +26,7 @@ export async function runFixerAgent(ctx: AgentContext): Promise<AgentResult> {
     throw new Error('Fixer Agent requires reviewResult in context');
   }
 
-  const issueList = ctx.reviewResult.issues.map((i) => `- ${i}`).join('\n');
+  const issueList = ctx.priorityFixes?.map((i) => `- ${i}`).join('\n') ?? 'なし';
   const suggList = ctx.reviewResult.suggestions.map((s) => `- ${s}`).join('\n');
   const codeToFix = ctx.fixedCode ?? ctx.code ?? '';
 

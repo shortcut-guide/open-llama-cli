@@ -3,28 +3,25 @@ import chalk from 'chalk';
 import { callLLM, type Message } from '../model/llm.js';
 import type { AgentContext, AgentResult, ReviewResult } from './types.js';
 
-const REVIEWER_SYSTEM_PROMPT = `あなたはシニアエンジニアのコードレビュアーです。
-生成されたコードをレビューし、品質を評価します。
+const REVIEWER_SYSTEM_PROMPT = `あなたはコードの完成判定を行います。
 
-【レビュー観点】
-- 型安全性（TypeScript）
-- バグ・ロジックエラーの有無
-- セキュリティリスク
-- パフォーマンス問題
-- コードの可読性・保守性
-- エラーハンドリングの適切さ
+【判定】
+1. 実行可能か
+2. ユーザー要求を満たしているか
+3. ダミーコードではないか
 
-【出力形式】
-必ず以下のJSON形式のみで出力してください（前後にテキスト不要）：
+【NG例】
+- 汎用サンプルコード
+- 意味のない関数
+- 要求と無関係
 
+【出力】
 {
-  "approved": true または false,
-  "issues": ["問題点1", "問題点2"],
-  "suggestions": ["改善提案1", "改善提案2"]
+  "approved": true/false,
+  "issues": [],
+  "priority_fixes": []
 }
-
-問題がない場合: approved=true, issues=[], suggestions=[]
-問題がある場合: approved=false, issues に具体的な問題を記載`;
+`;
 
 export async function runReviewerAgent(ctx: AgentContext): Promise<AgentResult> {
   console.log(chalk.bold.yellow('\n╔══════════════════════════════════════╗'));

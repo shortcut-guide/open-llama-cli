@@ -9,12 +9,14 @@ export interface AgentContext {
   fixedCode?: string;
   iterationCount: number;
   fileTargets?: string[];
+  priorityFixes?: string[];
 }
 
 export interface ReviewResult {
   approved: boolean;
   issues: string[];
   suggestions: string[];
+  priority_fixes?: string[];
   raw: string;
 }
 
