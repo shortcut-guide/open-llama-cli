@@ -26,5 +26,21 @@
   {
     "role": "assistant",
     "content": "こんにちは！"
+  },
+  {
+    "role": "user",
+    "content": "hello"
+  },
+  {
+    "role": "assistant",
+    "content": "こんにちは！何かお手伝いできることはありますか？"
+  },
+  {
+    "role": "user",
+    "content": "exit"
+  },
+  {
+    "role": "assistant",
+    "content": "お元気ですか？何かお手伝いできることはありますか？"
   }
 ]
