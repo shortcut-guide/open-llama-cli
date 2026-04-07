@@ -1,43 +1,60 @@
 #!/usr/bin/env node
-import 'dotenv/config';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import chalk from 'chalk';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import { glob } from 'glob';
 // ============================================================================
-// 1. 設定と定数
+// 0. 環境変数ロード
 // ============================================================================
-const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:11434/v1/chat/completions';
-const TEMPERATURE = parseFloat(process.env.TEMPERATURE || '0.7');
-const MAX_TOKENS = parseInt(process.env.MAX_TOKENS || '4096', 10);
+async function loadEnvFile(filePath) {
+    try {
+        const content = await fs.readFile(filePath, 'utf-8');
+        content.split('\n').forEach((line) => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || trimmedLine.startsWith('#'))
+                return;
+            const [key, ...values] = trimmedLine.split('=');
+            if (key && values) {
+                const value = values.join('=').trim().replace(/^["']|["']$/g, '');
+                process.env[key.trim()] = value;
+            }
+        });
+        console.log(chalk.gray(`  Loaded config from: ${filePath}`));
+    }
+    catch { }
+}
+async function initializeConfig() {
+    await loadEnvFile(path.join(os.homedir(), '.lcli.env'));
+    await loadEnvFile(path.join(process.cwd(), '.env'));
+}
+// ============================================================================
+// 1. 設定
+// ============================================================================
+const getConfig = () => ({
+    LLM_API_URL: process.env.LLM_API_URL || 'http://127.0.0.1:11434/v1/chat/completions',
+    TEMPERATURE: parseFloat(process.env.TEMPERATURE || '0.7'),
+    MAX_TOKENS: parseInt(process.env.MAX_TOKENS || '4096', 10),
+    WORKSPACE_ROOT: process.env.WORKSPACE_ROOT || process.cwd(),
+    AUTO_WRITE_DEFAULT: process.env.AUTO_WRITE === 'true' || process.env.AUTO_WRITE === '1',
+    SYSTEM_PROMPT: process.env.SYSTEM_PROMPT || 'あなたは優秀なAIアシスタントです。',
+});
 const HISTORY_FILE = path.join(process.cwd(), 'chat_history.json');
-const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || process.cwd();
-// AUTO_WRITE=true で確認なし即時書き込み（.env または /autowrite コマンドで切替可）
-let AUTO_WRITE = process.env.AUTO_WRITE === 'true' || process.env.AUTO_WRITE === '1';
-const BASE_SYSTEM_PROMPT = process.env.SYSTEM_PROMPT || 'あなたは優秀なAIアシスタントです。';
-const SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
-
-【重要指令】
-ファイルを新規作成または上書き更新する場合は、必ず以下の専用マークダウン形式で出力してください：
-
-\`\`\`file:保存先のファイルパス
-ここにファイルの中身全体を記述
-\`\`\`
-
-注意: 複数のファイルを変更する場合は、このブロックを複数回出力してください。
-`;
+let WORKSPACE_ROOT = process.cwd();
+let AUTO_WRITE = false;
+const originalLineCountCache = new Map();
 // ============================================================================
-// 2. Model: 履歴管理
+// Model: 履歴管理
 // ============================================================================
-async function loadHistory() {
+async function loadHistory(systemPrompt) {
     try {
         const data = await fs.readFile(HISTORY_FILE, 'utf-8');
         return JSON.parse(data);
     }
     catch {
-        return [{ role: 'system', content: SYSTEM_PROMPT }];
+        return [{ role: 'system', content: systemPrompt }];
     }
 }
 async function saveHistory(history) {
@@ -49,11 +66,8 @@ async function saveHistory(history) {
     }
 }
 // ============================================================================
-// 3. Model: ファイル操作
+// Model: ファイル操作
 // ============================================================================
-/**
- * ワークスペース内パスを解決（外部パスへのアクセスを防止）
- */
 function resolveSafe(filePath) {
     const abs = path.isAbsolute(filePath)
         ? filePath
@@ -64,9 +78,6 @@ function resolveSafe(filePath) {
     }
     return abs;
 }
-/**
- * ファイル検索 — glob パターン + オプションで内容の正規表現マッチ
- */
 async function searchFiles(pattern, contentRegex) {
     const files = await glob(pattern, {
         cwd: WORKSPACE_ROOT,
@@ -74,9 +85,8 @@ async function searchFiles(pattern, contentRegex) {
         dot: false,
         ignore: ['node_modules/**', '.git/**', '*.json'],
     });
-    if (!contentRegex) {
+    if (!contentRegex)
         return files.map((f) => ({ filePath: f }));
-    }
     const re = new RegExp(contentRegex, 'gm');
     const results = [];
     for (const f of files) {
@@ -91,69 +101,108 @@ async function searchFiles(pattern, contentRegex) {
             if (matchedLines.length > 0)
                 results.push({ filePath: f, matchedLines });
         }
-        catch {
-            /* バイナリや読めないファイルはスキップ */
-        }
+        catch { }
     }
     return results;
 }
-/**
- * ファイル内容を読み込む
- */
-async function readFile(filePath) {
+async function readFileContent(filePath) {
     return fs.readFile(resolveSafe(filePath), 'utf-8');
 }
-/**
- * ファイルを上書き保存（ディレクトリも自動生成）
- */
 async function writeFile(filePath, content) {
     const abs = resolveSafe(filePath);
     await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, content, 'utf-8');
 }
-/**
- * ファイルの文字列を置換して保存
- */
 async function replaceLines(filePath, searchText, replaceText) {
-    const content = await readFile(filePath);
+    const content = await readFileContent(filePath);
     const lines = content.split('\n');
     const count = lines.filter((l) => l.includes(searchText)).length;
     const updated = lines.map((l) => l.includes(searchText) ? l.replace(searchText, replaceText) : l);
     await writeFile(filePath, updated.join('\n'));
     return count;
 }
-/**
- * ファイル削除（ワークスペース外は禁止）
- */
 async function deleteFile(filePath) {
     await fs.rm(resolveSafe(filePath), { recursive: false });
 }
 // ============================================================================
-// 4. Model: LLM API
+// Model: LLM API
+// ============================================================================
+// async function callLLM(history: Message[]): Promise<string> {
+//   const config = getConfig();
+//   const response = await fetch(config.LLM_API_URL, {
+//     method: 'POST',
+//     headers: { 'Content-Type': 'application/json' },
+//     body: JSON.stringify({
+//       messages: history,
+//       temperature: config.TEMPERATURE,
+//       max_tokens: config.MAX_TOKENS,
+//       stream: false,
+//     }),
+//   });
+//   if (!response.ok) {
+//     throw new Error(`LLM API Error: ${response.status} ${await response.text()}`);
+//   }
+//   const data = (await response.json()) as {
+//     choices: { message: { content: string } }[];
+//   };
+//   return data.choices[0]?.message?.content ?? '';
+// }
+// ============================================================================
+// Model: LLM API (Streaming版)
 // ============================================================================
 async function callLLM(history) {
-    const response = await fetch(LLM_API_URL, {
+    const config = getConfig();
+    const response = await fetch(config.LLM_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             messages: history,
-            temperature: TEMPERATURE,
-            max_tokens: MAX_TOKENS,
-            stream: false,
+            temperature: config.TEMPERATURE,
+            max_tokens: config.MAX_TOKENS,
+            stream: true, // ストリーミングを有効化
         }),
     });
     if (!response.ok) {
         throw new Error(`LLM API Error: ${response.status} ${await response.text()}`);
     }
-    const data = (await response.json());
-    return data.choices[0]?.message?.content ?? '';
+    const reader = response.body?.getReader();
+    if (!reader)
+        throw new Error('ReadableStream not supported.');
+    const decoder = new TextDecoder();
+    let fullContent = '';
+    process.stdout.write(chalk.green('\nAI: '));
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done)
+            break;
+        const chunk = decoder.decode(value, { stream: true });
+        // OpenAI互換API（Llama.cpp / Ollama）のSSE形式をパース
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                const dataStr = line.slice(6).trim();
+                if (dataStr === '[DONE]')
+                    continue;
+                try {
+                    const json = JSON.parse(dataStr);
+                    const content = json.choices[0]?.delta?.content || '';
+                    if (content) {
+                        fullContent += content;
+                        process.stdout.write(content); // リアルタイムでターミナルに出力
+                    }
+                }
+                catch (e) {
+                    // パース失敗は無視（不完全なJSONチャンク対策）
+                }
+            }
+        }
+    }
+    console.log('\n'); // 最後に改行
+    return fullContent;
 }
 // ============================================================================
-// 5. Controller: チャット返答からのファイル自動反映
+// Controller: ファイルブロック処理
 // ============================================================================
-/**
- * ```file:path ブロックを抽出
- */
 function extractFileBlocks(message) {
     const FILE_BLOCK_RE = /```file:([^\n]+)\n([\s\S]*?)```/g;
     const results = [];
@@ -164,18 +213,128 @@ function extractFileBlocks(message) {
     return results;
 }
 /**
- * AUTO_WRITE=true  → 確認なしで全件即時書き込み
- * AUTO_WRITE=false → y/N/番号 で選択
+ * 書き込み前サニティチェック。
+ * - 空コンテンツをブロック
+ * - 元ファイル行数の50%未満は警告 → 強制確認
  */
-async function handleFileEditProposals(assistantMessage, rl) {
+const SANITY_RATIO = 0.5;
+async function sanityCheckWrite(filePath, proposedContent, rl) {
+    const proposedLines = proposedContent.trim().split('\n').length;
+    if (proposedContent.trim().length === 0) {
+        console.log(chalk.red(`  ⛔ [安全ガード] 提案内容が空です。書き込みをブロック: ${filePath}`));
+        return false;
+    }
+    let originalLines = originalLineCountCache.get(filePath);
+    if (originalLines === undefined) {
+        try {
+            const existing = await readFileContent(filePath);
+            originalLines = existing.split('\n').length;
+        }
+        catch {
+            return true;
+        }
+    }
+    if (proposedLines < originalLines * SANITY_RATIO) {
+        console.log(chalk.red(`\n  ⛔ [安全ガード] 行数が大幅に減少しています。` +
+            `\n     元: ${originalLines}行 → 提案: ${proposedLines}行` +
+            ` (${Math.round((proposedLines / originalLines) * 100)}%)`));
+        console.log(chalk.yellow(`\n  提案内容の先頭20行:\n`));
+        proposedContent.split('\n').slice(0, 20).forEach((l, i) => console.log(chalk.gray(`  ${String(i + 1).padStart(3)}: ${l}`)));
+        const force = await rl.question(chalk.red(`\n  強制的に書き込みますか？ [yes で続行 / それ以外でキャンセル]: `));
+        if (force.trim().toLowerCase() !== 'yes') {
+            console.log(chalk.gray('  ✋ 書き込みをキャンセルしました。'));
+            return false;
+        }
+    }
+    return true;
+}
+/**
+ * AIの返答からファイルブロックを取得し、空ブロックがあれば自動リトライする。
+ *
+ * リトライ戦略:
+ *   空ブロック検知 → ファイルをチャンク分割して順番に出力させる
+ *   チャンクを結合して最終ファイルを構築する
+ */
+const RETRY_CHUNK_LINES = 20; // 1回のリトライで要求する行数
+const MAX_RETRY = 5; // 最大リトライ回数
+async function fetchFileContentInChunks(filePath, originalContent, history) {
+    const totalLines = originalContent.split('\n').length;
+    let assembled = '';
+    let startLine = 1;
+    let retryCount = 0;
+    console.log(chalk.yellow(`\n  🔄 チャンク分割モードで再取得します (${totalLines}行 / ${RETRY_CHUNK_LINES}行ずつ)\n`));
+    while (startLine <= totalLines && retryCount < MAX_RETRY) {
+        const endLine = Math.min(startLine + RETRY_CHUNK_LINES - 1, totalLines);
+        const isLast = endLine >= totalLines;
+        const chunkPrompt = `前回のリファクタリング済みコードを ${startLine}行目から${endLine}行目まで出力してください。` +
+            `コードブロック（\`\`\`tsx や \`\`\`typescript）で囲んで出力してください。` +
+            (isLast ? '（これが最終チャンクです）' : '');
+        console.log(chalk.gray(`  📦 チャンク取得: L${startLine}-L${endLine}...`));
+        const chunkHistory = [
+            ...history,
+            { role: 'user', content: chunkPrompt },
+        ];
+        try {
+            const chunkResponse = await callLLM(chunkHistory);
+            // コードブロック内容を抽出
+            const codeMatch = chunkResponse.match(/```(?:tsx|typescript|ts)?\n?([\s\S]*?)```/);
+            if (codeMatch && codeMatch[1].trim().length > 0) {
+                assembled += (assembled ? '\n' : '') + codeMatch[1].trimEnd();
+                startLine = endLine + 1;
+                retryCount = 0;
+            }
+            else {
+                retryCount++;
+                console.log(chalk.yellow(`  ⚠️  チャンク取得失敗 (${retryCount}/${MAX_RETRY})、リトライ...`));
+            }
+        }
+        catch {
+            retryCount++;
+        }
+    }
+    return assembled;
+}
+async function handleFileEditProposals(assistantMessage, history, rl) {
     const proposals = extractFileBlocks(assistantMessage);
     if (proposals.length === 0)
         return;
     console.log(chalk.yellow(`\n📝 ${proposals.length}件のファイルブロックを検知:\n`));
-    proposals.forEach((p, i) => console.log(chalk.cyan(`  [${i + 1}] ${p.filePath}`)));
-    // ── 自動書き込みモード ──────────────────────────────────────────────────
+    // 空ブロックを検知してチャンクリトライで補完する
+    const resolvedProposals = [];
+    for (const p of proposals) {
+        const lines = p.content.trim().split('\n').length;
+        const isEmpty = p.content.trim().length === 0;
+        const isTooShort = (originalLineCountCache.get(p.filePath) ?? 0) > 0 &&
+            lines < (originalLineCountCache.get(p.filePath) ?? 0) * SANITY_RATIO;
+        if (isEmpty || isTooShort) {
+            console.log(chalk.yellow(`  ⚠️  [${p.filePath}] 内容が不十分 (${isEmpty ? '空' : lines + '行'})。チャンクリトライを開始します...`));
+            // 元ファイルを読み込んでチャンク要求のベースにする
+            let originalContent = '';
+            try {
+                originalContent = await readFileContent(p.filePath);
+            }
+            catch { }
+            const recovered = await fetchFileContentInChunks(p.filePath, originalContent, history);
+            if (recovered.trim().length > 0) {
+                console.log(chalk.green(`  ✅ チャンク結合完了: ${recovered.split('\n').length}行`));
+                resolvedProposals.push({ filePath: p.filePath, content: recovered });
+            }
+            else {
+                console.log(chalk.red(`  ❌ チャンク取得に失敗しました。スキップ: ${p.filePath}`));
+            }
+        }
+        else {
+            console.log(chalk.cyan(`  [${p.filePath}]`) + chalk.gray(` (${lines}行)`));
+            resolvedProposals.push(p);
+        }
+    }
+    if (resolvedProposals.length === 0)
+        return;
     if (AUTO_WRITE) {
-        for (const p of proposals) {
+        for (const p of resolvedProposals) {
+            const ok = await sanityCheckWrite(p.filePath, p.content, rl);
+            if (!ok)
+                continue;
             try {
                 await writeFile(p.filePath, p.content);
                 console.log(chalk.green(`  ✅ 自動保存: ${p.filePath}`));
@@ -186,11 +345,13 @@ async function handleFileEditProposals(assistantMessage, rl) {
         }
         return;
     }
-    // ── 手動確認モード ──────────────────────────────────────────────────────
     const answer = await rl.question(chalk.yellow('\n適用しますか？ [y=全件 / N=スキップ / 番号=選択]: '));
-    const trimmed = answer.trim().toLowerCase();
-    if (trimmed === 'y' || trimmed === 'yes') {
-        for (const p of proposals) {
+    const trimmedAns = answer.trim().toLowerCase();
+    if (trimmedAns === 'y' || trimmedAns === 'yes') {
+        for (const p of resolvedProposals) {
+            const ok = await sanityCheckWrite(p.filePath, p.content, rl);
+            if (!ok)
+                continue;
             try {
                 await writeFile(p.filePath, p.content);
                 console.log(chalk.green(`  ✅ 保存: ${p.filePath}`));
@@ -200,15 +361,19 @@ async function handleFileEditProposals(assistantMessage, rl) {
             }
         }
     }
-    else if (/^\d+$/.test(trimmed)) {
-        const idx = parseInt(trimmed, 10) - 1;
-        if (idx >= 0 && idx < proposals.length) {
-            try {
-                await writeFile(proposals[idx].filePath, proposals[idx].content);
-                console.log(chalk.green(`  ✅ 保存: ${proposals[idx].filePath}`));
-            }
-            catch (e) {
-                console.error(chalk.red(`  ❌ 保存失敗: ${e.message}`));
+    else if (/^\d+$/.test(trimmedAns)) {
+        const idx = parseInt(trimmedAns, 10) - 1;
+        if (idx >= 0 && idx < resolvedProposals.length) {
+            const p = resolvedProposals[idx];
+            const ok = await sanityCheckWrite(p.filePath, p.content, rl);
+            if (ok) {
+                try {
+                    await writeFile(p.filePath, p.content);
+                    console.log(chalk.green(`  ✅ 保存: ${p.filePath}`));
+                }
+                catch (e) {
+                    console.error(chalk.red(`  ❌ 保存失敗: ${e.message}`));
+                }
             }
         }
         else {
@@ -220,35 +385,29 @@ async function handleFileEditProposals(assistantMessage, rl) {
     }
 }
 // ============================================================================
-// 6. Controller: コマンドディスパッチ
+// Controller: コマンドディスパッチ
 // ============================================================================
+let pendingFileContext = null;
 async function handleCommand(userInput, rl) {
     const trimmed = userInput.trim();
-    // ─── /autowrite [on|off] ────────────────────────────────────────────────
     if (trimmed.startsWith('/autowrite')) {
         const arg = trimmed.slice(10).trim().toLowerCase();
-        if (arg === 'on') {
+        if (arg === 'on')
             AUTO_WRITE = true;
-        }
-        else if (arg === 'off') {
+        else if (arg === 'off')
             AUTO_WRITE = false;
-        }
-        else {
+        else
             AUTO_WRITE = !AUTO_WRITE;
-        }
         console.log(AUTO_WRITE
-            ? chalk.green('  🟢 自動書き込み: ON（AIの返答を即時ファイルへ反映）')
-            : chalk.gray('  ⚪ 自動書き込み: OFF（確認プロンプトあり）'));
+            ? chalk.green('  🟢 自動書き込み: ON')
+            : chalk.gray('  ⚪ 自動書き込み: OFF（確認あり）'));
         return true;
     }
-    // ─── /search <glob> [--content <regex>] ─────────────────────────────────
     if (trimmed.startsWith('/search ')) {
         const args = trimmed.slice(8).trim();
         const contentMatch = args.match(/--content\s+(.+)$/);
         const contentRegex = contentMatch ? contentMatch[1].trim() : undefined;
-        const pattern = contentRegex
-            ? args.replace(/--content\s+.+$/, '').trim()
-            : args;
+        const pattern = contentRegex ? args.replace(/--content\s+.+$/, '').trim() : args;
         console.log(chalk.blue(`\n🔍 検索中: ${pattern}${contentRegex ? ` (内容: ${contentRegex})` : ''}\n`));
         const results = await searchFiles(pattern, contentRegex);
         if (results.length === 0) {
@@ -263,21 +422,27 @@ async function handleCommand(userInput, rl) {
         }
         return true;
     }
-    // ─── /read <filePath> ────────────────────────────────────────────────────
     if (trimmed.startsWith('/read ')) {
         const filePath = trimmed.slice(6).trim();
         try {
-            const content = await readFile(filePath);
+            const content = await readFileContent(filePath);
             const lines = content.split('\n');
+            originalLineCountCache.set(filePath, lines.length);
             console.log(chalk.blue(`\n📖 ${filePath} (${lines.length}行)\n`));
             lines.forEach((line, i) => console.log(chalk.gray(`${String(i + 1).padStart(4)}: `) + line));
+            // ファイル全文をpendingに保持（historyへの偽ターン挿入はしない）
+            pendingFileContext =
+                `対象ファイル: \`${filePath}\` (${lines.length}行)\n\n` +
+                    "```\n" + content + "\n```\n\n" +
+                    `上記ファイルに対して次の指示を実行してください。` +
+                    `必ず \`\`\`file:${filePath}\`\`\` 形式でファイル全体を省略なく出力してください。`;
+            console.log(chalk.gray(`\n  ℹ️  コンテキストを保持しました (${lines.length}行)。続けてタスクを入力してください。\n`));
         }
         catch (e) {
             console.error(chalk.red(`  ❌ 読み込み失敗: ${e.message}`));
         }
         return true;
     }
-    // ─── /write <filePath> ───────────────────────────────────────────────────
     if (trimmed.startsWith('/write ')) {
         const filePath = trimmed.slice(7).trim();
         console.log(chalk.yellow(`\n✏️  ${filePath} の内容を入力（"EOF" で終了）:\n`));
@@ -292,7 +457,6 @@ async function handleCommand(userInput, rl) {
         console.log(chalk.green(`  ✅ 保存しました: ${filePath}`));
         return true;
     }
-    // ─── /replace <filePath> <search> => <replace> ───────────────────────────
     if (trimmed.startsWith('/replace ')) {
         const rest = trimmed.slice(9).trim();
         const sepIdx = rest.indexOf(' ');
@@ -318,7 +482,6 @@ async function handleCommand(userInput, rl) {
         }
         return true;
     }
-    // ─── /delete <filePath> ──────────────────────────────────────────────────
     if (trimmed.startsWith('/delete ')) {
         const filePath = trimmed.slice(8).trim();
         const confirm = await rl.question(chalk.red(`\n⚠️  ${filePath} を削除しますか？ [y/N]: `));
@@ -336,8 +499,7 @@ async function handleCommand(userInput, rl) {
         }
         return true;
     }
-    // ─── /history ────────────────────────────────────────────────────────────
-    if (trimmed === '/history') {
+    if (trimmed === '/clear') {
         try {
             await fs.unlink(HISTORY_FILE);
             console.log(chalk.green('  ✅ 履歴をクリアしました。'));
@@ -347,7 +509,6 @@ async function handleCommand(userInput, rl) {
         }
         return true;
     }
-    // ─── /help ───────────────────────────────────────────────────────────────
     if (trimmed === '/help') {
         const autoStatus = AUTO_WRITE ? chalk.green('ON') : chalk.gray('OFF');
         console.log(chalk.cyan(`
@@ -357,17 +518,16 @@ async function handleCommand(userInput, rl) {
 │  /autowrite [on|off]           │ 自動書き込みトグル               │
 │  /search <glob>                │ globでファイル検索               │
 │  /search <glob> --content <re> │ ファイル内容を正規表現検索       │
-│  /read <path>                  │ ファイル内容を行番号付きで表示   │
+│  /read <path>                  │ ファイル表示 + 次発言へ注入      │
 │  /write <path>                 │ 対話入力でファイル書き込み       │
 │  /replace <path> <s> => <r>    │ 文字列置換                       │
 │  /delete <path>                │ ファイル削除（確認あり）          │
-│  /history                      │ チャット履歴をクリア             │
+│  /clear                      │ チャット履歴をクリア             │
 │  /exit                         │ 終了                             │
 └────────────────────────────────┴─────────────────────────────────┘
   自動書き込み現在: `) + autoStatus + '\n');
         return true;
     }
-    // ─── /exit ───────────────────────────────────────────────────────────────
     if (trimmed === '/exit' || trimmed === '/quit') {
         console.log(chalk.cyan('\n👋 終了します。\n'));
         process.exit(0);
@@ -375,7 +535,7 @@ async function handleCommand(userInput, rl) {
     return false;
 }
 // ============================================================================
-// 7. View
+// View
 // ============================================================================
 function printAutoWriteStatus() {
     console.log(AUTO_WRITE
@@ -383,15 +543,34 @@ function printAutoWriteStatus() {
         : chalk.gray('  ⚪ 自動書き込み: OFF（確認あり）'));
 }
 // ============================================================================
-// 8. Controller: メインループ
+// Controller: メインループ
 // ============================================================================
 async function main() {
+    await initializeConfig();
+    const config = getConfig();
+    WORKSPACE_ROOT = config.WORKSPACE_ROOT;
+    AUTO_WRITE = config.AUTO_WRITE_DEFAULT;
+    const fullSystemPrompt = `${config.SYSTEM_PROMPT}
+【重要指令】
+ファイルを新規作成または上書き更新する場合は、必ず以下の専用マークダウン形式で出力してください：
+
+\`\`\`file:保存先のファイルパス
+ここにファイルの中身全体を記述
+\`\`\`
+
+【絶対禁止事項】
+- \`// ...\` \`// existing code\` \`// ... (existing props)\` などの省略表現を禁止します
+- ファイルブロック内は必ずファイル全体を省略なく完全に記述してください
+- 差分・パッチ形式での出力は禁止です。常に完全なファイル内容を出力してください
+
+注意: 複数のファイルを変更する場合は、このブロックを複数回出力してください。
+`;
     const rl = readline.createInterface({ input, output });
     console.log(chalk.bold.cyan('\n🤖 AI Chat CLI\n'));
-    console.log(chalk.gray(`  ワークスペース: ${WORKSPACE_ROOT}`));
+    console.log(chalk.gray(`  ワークスペース: ${config.WORKSPACE_ROOT}`));
     printAutoWriteStatus();
     console.log(chalk.gray('  "/help" でコマンド一覧 | "/autowrite" で自動書き込み切替\n'));
-    const history = await loadHistory();
+    const history = await loadHistory(fullSystemPrompt);
     while (true) {
         const userInput = await rl.question(chalk.blue('You: '));
         if (!userInput.trim())
@@ -399,14 +578,17 @@ async function main() {
         const handled = await handleCommand(userInput, rl);
         if (handled)
             continue;
-        history.push({ role: 'user', content: userInput });
+        let messageContent = userInput;
+        if (pendingFileContext) {
+            messageContent = `${pendingFileContext}\n\n指示: ${userInput}`;
+            pendingFileContext = null;
+        }
+        history.push({ role: 'user', content: messageContent });
         try {
             const assistantMessage = await callLLM(history);
-            console.log(chalk.green('\nAI: ') + assistantMessage + '\n');
             history.push({ role: 'assistant', content: assistantMessage });
             await saveHistory(history);
-            // ファイルブロックを自動 or 確認付きで反映
-            await handleFileEditProposals(assistantMessage, rl);
+            await handleFileEditProposals(assistantMessage, history, rl);
         }
         catch (e) {
             console.error(chalk.red(`\n❌ LLMエラー: ${e.message}\n`));

@@ -2,5 +2,29 @@
   {
     "role": "system",
     "content": "あなたは優秀なAIアシスタントです。ユーザーの質問に正確に、かつ簡潔に日本語で答えてください。"
+  },
+  {
+    "role": "user",
+    "content": "Hello"
+  },
+  {
+    "role": "assistant",
+    "content": "こんにちは！お元気ですか？"
+  },
+  {
+    "role": "user",
+    "content": "exit"
+  },
+  {
+    "role": "assistant",
+    "content": "了ominated"
+  },
+  {
+    "role": "user",
+    "content": "hello"
+  },
+  {
+    "role": "assistant",
+    "content": "こんにちは！"
   }
 ]
