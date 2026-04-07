@@ -6,6 +6,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { glob } from 'glob';
+import { fileURLToPath } from 'node:url';
 // ============================================================================
 // 0. 環境変数ロード
 // ============================================================================
@@ -33,6 +34,8 @@ async function initializeConfig() {
 // ============================================================================
 // 1. 設定
 // ============================================================================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const getConfig = () => ({
     LLM_API_URL: process.env.LLM_API_URL || 'http://127.0.0.1:11434/v1/chat/completions',
     TEMPERATURE: parseFloat(process.env.TEMPERATURE || '0.7'),
