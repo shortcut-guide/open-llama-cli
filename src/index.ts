@@ -10,14 +10,12 @@ import { initializeConfig, getConfig } from './config.js';
 import { loadHistory, saveHistory } from './model/history.js';
 import { setWorkspaceRoot } from './model/file.js';
 import { callLLM, type Message } from './model/llm.js';
-import { runOrchestrator } from './orchestrator.js';
 import {
   handleCommand,
   getAutoWrite,
   setAutoWrite,
   getPendingFileContext,
   clearPendingFileContext,
-  parseAgentCommand,
 } from './controller/command.js';
 import { handleFileEditProposals } from './controller/fileProposal.js';
 import {
@@ -37,7 +35,6 @@ async function main(): Promise<void> {
   setWorkspaceRoot(config.WORKSPACE_ROOT);
   setAutoWrite(config.AUTO_WRITE_DEFAULT);
 
-  // 通常チャット用のシステムプロンプト
   const fullSystemPrompt = `${config.SYSTEM_PROMPT}
 【重要指令】
 ファイルを新規作成または上書き更新する場合は、必ず以下の専用マークダウン形式で出力してください：
@@ -55,8 +52,8 @@ async function main(): Promise<void> {
 `;
 
   const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+    input,
+    output,
   });
 
   printBanner();
@@ -70,34 +67,18 @@ async function main(): Promise<void> {
     const userInput = await rl.question(chalk.blue('You: '));
     if (!userInput.trim()) continue;
 
-    // ─── /agent コマンド: Multi-Agent Orchestrator ───────────────
-    if (userInput.trim().startsWith('/agent')) {
-      const parsed = parseAgentCommand(userInput.trim());
-      // parsed = { type: 'refactor' | 'new' | 'fix' | 'extend' | 'analyze' }
+    // ✅ コマンド処理（/agent含む）
+    const handled = await handleCommand(userInput, rl, {
+      history,
+      fullSystemPrompt,
+    });
 
-      const task = await readMultiline(rl);
-      if (!task.trim()) { console.log("空です"); continue;}
-
-      try {
-        const result = await runOrchestrator(task,parsed.type);
-        // Orchestratorの最終コードをhistoryに追記してファイルブロック処理
-        history.push({ role: 'user', content: `[Multi-Agent Task] ${task}` });
-        history.push({ role: 'assistant', content: result.finalCode });
-        await saveHistory(history);
-        await handleFileEditProposals(result.finalCode, history, rl, getAutoWrite());
-      } catch (e: unknown) {
-        console.error(chalk.red(`\n❌ Orchestratorエラー: ${(e as Error).message}\n`));
-      }
-      continue;
-    }
-
-    // ─── 通常コマンド処理 ────────────────────────────────────────
-    const handled = await handleCommand(userInput, rl);
     if (handled) continue;
 
-    // ─── 通常チャット ────────────────────────────────────────────
+    // ─── 通常チャット ─────────────────────────
     let messageContent = userInput;
     const pending = getPendingFileContext();
+
     if (pending) {
       messageContent = `${pending}\n\n指示: ${userInput}`;
       clearPendingFileContext();
@@ -110,30 +91,21 @@ async function main(): Promise<void> {
         printStream: true,
         label: 'AI',
       });
+
       history.push({ role: 'assistant', content: assistantMessage });
+
       await saveHistory(history);
-      await handleFileEditProposals(assistantMessage, history, rl, getAutoWrite());
+
+      await handleFileEditProposals(
+        assistantMessage,
+        history,
+        rl,
+        getAutoWrite()
+      );
     } catch (e: unknown) {
       console.error(chalk.red(`\n❌ LLMエラー: ${(e as Error).message}\n`));
     }
   }
-}
-
-async function readMultiline(rl: readline.Interface): Promise<string> {
-  return new Promise((resolve) => {
-    console.log("\n📝 複数行入力モード（/endで送信）\n");
-
-    let lines: string[] = [];
-
-    rl.on("line", (line) => {
-      if (line.trim() === "/end") {
-        rl.removeAllListeners("line");
-        resolve(lines.join("\n"));
-      } else {
-        lines.push(line);
-      }
-    });
-  });
 }
 
 main().catch((e) => {

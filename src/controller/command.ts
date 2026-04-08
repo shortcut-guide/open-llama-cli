@@ -2,6 +2,7 @@
 import * as readline from 'node:readline/promises';
 import * as fs from 'node:fs/promises';
 import chalk from 'chalk';
+
 import {
   searchFiles,
   readFileContent,
@@ -9,22 +10,148 @@ import {
   replaceLines,
   deleteFile,
 } from '../model/file.js';
-import { clearHistory } from '../model/history.js';
-import { getLineCountCache } from './fileProposal.js';
+
+import { clearHistory, saveHistory } from '../model/history.js';
+import { getLineCountCache, handleFileEditProposals } from './fileProposal.js';
+import { runOrchestrator } from '../orchestrator.js';
+import { Message } from '../model/llm.js';
 
 let AUTO_WRITE: boolean = false;
 export let pendingFileContext: string | null = null;
 
-export function getAutoWrite(): boolean { return AUTO_WRITE; }
-export function setAutoWrite(v: boolean): void { AUTO_WRITE = v; }
-export function clearPendingFileContext(): void { pendingFileContext = null; }
-export function getPendingFileContext(): string | null { return pendingFileContext; }
+// ─────────────────────────────────────
+
+export interface CommandContext {
+  history: Message[];
+  fullSystemPrompt: string;
+}
+
+// ─────────────────────────────────────
+
+export function getAutoWrite(): boolean {
+  return AUTO_WRITE;
+}
+
+export function setAutoWrite(v: boolean): void {
+  AUTO_WRITE = v;
+}
+
+export function clearPendingFileContext(): void {
+  pendingFileContext = null;
+}
+
+export function getPendingFileContext(): string | null {
+  return pendingFileContext;
+}
+
+// ─────────────────────────────────────
+// multiline入力
+async function readMultiline(rl: readline.Interface): Promise<string> {
+  return new Promise((resolve) => {
+    console.log("\n📝 複数行入力モード（/endで送信）\n");
+
+    let lines: string[] = [];
+
+    rl.on("line", (line) => {
+      if (line.trim() === "/end") {
+        rl.removeAllListeners("line");
+        resolve(lines.join("\n"));
+      } else {
+        lines.push(line);
+      }
+    });
+  });
+}
+
+// ─────────────────────────────────────
+// Agent Command
+
+export type TaskType = 'new' | 'refactor' | 'fix' | 'extend' | 'analyze' | null;
+
+export interface AgentCommand {
+  type: TaskType;
+  rawInput: string;
+}
+
+const VALID_TYPES: TaskType[] = ['new', 'refactor', 'fix', 'extend', 'analyze'];
+
+export function parseAgentCommand(input: string): AgentCommand {
+  const parts = input.split(/\s+/);
+  const typeArg = parts[1]?.toLowerCase() as TaskType;
+
+  if (VALID_TYPES.includes(typeArg)) {
+    return { type: typeArg, rawInput: input };
+  }
+
+  if (parts[1]) {
+    console.log(chalk.yellow(
+      `⚠️ 不明なタイプ "${parts[1]}" → 自動判断モード`
+    ));
+  }
+
+  return { type: null, rawInput: input };
+}
+
+// ─────────────────────────────────────
+// メインコマンドハンドラ
 
 export async function handleCommand(
   userInput: string,
-  rl: readline.Interface
+  rl: readline.Interface,
+  ctx: CommandContext
 ): Promise<boolean> {
+
   const trimmed = userInput.trim();
+
+  // ─── /agent ─────────────────────
+  if (trimmed.startsWith('/agent')) {
+    const parsed = parseAgentCommand(trimmed);
+
+    // ✅ 1行目からコマンド部分を除去して残りを取得
+    const firstLineTask = trimmed
+      .replace(/^\/agent\s*/, '')
+      .replace(/^(new|refactor|fix|extend|analyze)\s*/, '');
+
+    const multi = await readMultiline(rl);
+
+    // ✅ 1行目 + 複数行を結合
+    const task = [firstLineTask, multi].filter(Boolean).join('\n');
+
+    if (!task.trim()) {
+      console.log("空です");
+      return true;
+    }
+
+    try {
+      const result = await runOrchestrator(task, parsed.type);
+
+      ctx.history.push({
+        role: 'user',
+        content: `[Multi-Agent Task] ${task}`
+      });
+
+      ctx.history.push({
+        role: 'assistant',
+        content: result.finalCode
+      });
+
+      await saveHistory(ctx.history);
+
+      await handleFileEditProposals(
+        result.finalCode,
+        ctx.history,
+        rl,
+        getAutoWrite()
+      );
+
+    } catch (e: unknown) {
+      console.error(
+        chalk.red(`\n❌ Orchestratorエラー: ${(e as Error).message}\n`)
+      );
+    }
+
+    return true;
+  }
 
   if (trimmed.startsWith('/autowrite')) {
     const arg = trimmed.slice(10).trim().toLowerCase();
@@ -172,33 +299,4 @@ export async function handleCommand(
   }
 
   return false;
-}
-
-export type TaskType = 'new' | 'refactor' | 'fix' | 'extend' | 'analyze' | null;
-export interface AgentCommand {
-  type: TaskType;
-  rawInput: string;
-}
-const VALID_TYPES: TaskType[] = ['new', 'refactor', 'fix', 'extend', 'analyze'];
-export function parseAgentCommand(input: string): AgentCommand {
-  // "/agent refactor" → "refactor"
-  const parts = input.split(/\s+/);
-  // toLowerCase() で VALID_TYPES（小文字）と一致させる
-  const typeArg = parts[1]?.toLowerCase() as TaskType;
-
-  if (VALID_TYPES.includes(typeArg)) {
-    return { type: typeArg, rawInput: input };
-  }
-
-  // 未知のサブコマンドの場合は警告
-  if (parts[1] && !VALID_TYPES.includes(typeArg)) {
-    console.log(chalk.yellow(
-      `⚠️  不明なタイプ "${parts[1]}" → 自動判断モードで実行します`
-    ));
-    console.log(chalk.gray(
-      `  利用可能: /agent new | refactor | fix | extend | analyze`
-    ));
-  }
-
-  return { type: null, rawInput: input };
 }
