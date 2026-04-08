@@ -5,7 +5,7 @@ import { runPlannerAgent } from './agents/planner.js';
 import { runCoderAgent } from './agents/coder.js';
 import { runReviewerAgent, parseReviewResult } from './agents/reviewer.js';
 import { runFixerAgent } from './agents/fixer.js';
-import type { AgentContext } from './agents/types.js';
+import type { AgentContext,TaskType } from './agents/types.js';
 
 export interface OrchestratorResult {
   finalCode: string;
@@ -19,15 +19,58 @@ export interface OrchestratorResult {
  * - "simple": Planner不要の単純質問
  * - "code": フルAgent pipeline
  */
-function classifyTask(userTask: string): 'simple' | 'code' {
-  const codeKeywords = [
-    '実装', '作成', '修正', 'コード', 'バグ', 'リファクタリング',
-    'create', 'implement', 'fix', 'refactor', 'build', 'write',
-    'generate', 'update', 'add', 'delete', 'function', 'class',
-    'ファイル', 'component', 'api', 'endpoint',
-  ];
+function resolveTaskType(userTask: string, explicit: TaskType | null): TaskType {
+  // 明示指定があればそのまま使用
+  if (explicit) {
+    console.log(chalk.cyan(`  📌 TaskType: ${explicit} (明示指定)`));
+    return explicit;
+  }
+
+  // 自動推定ロジック
   const lower = userTask.toLowerCase();
-  return codeKeywords.some((kw) => lower.includes(kw)) ? 'code' : 'simple';
+
+  const patterns: { type: TaskType; keywords: string[] }[] = [
+    {
+      type: 'FIX',
+      keywords: ['バグ', '修正', 'エラー', 'fix', 'bug', 'error', 'broken', '直して']
+    },
+    {
+      type: 'REFACTOR',
+      keywords: ['リファクタ', 'リファクタリング', 'refactor', '整理', '改善', 'clean']
+    },
+    {
+      type: 'EXTEND',
+      keywords: ['追加', '拡張', 'add', 'extend', '機能追加', 'feature']
+    },
+    {
+      type: 'ANALYZE',
+      keywords: ['分析', 'レビュー', 'analyze', 'review', '確認', 'check']
+    },
+    {
+      type: 'NEW',
+      keywords: ['作成', '新規', '実装', 'create', 'implement', 'build', 'write', 'generate', 'new']
+    },
+  ];
+
+  for (const pattern of patterns) {
+    if (pattern.keywords.some((kw) => lower.includes(kw))) {
+      console.log(chalk.gray(`  🤖 TaskType: ${pattern.type} (自動推定)`));
+      return pattern.type;
+    }
+  }
+
+  // デフォルト
+  console.log(chalk.gray(`  🤖 TaskType: NEW (デフォルト)`));
+  return 'NEW';
+}
+
+function isWeakOutput(code: string): boolean {
+  return (
+    code.length < 120 ||
+    !code.includes("file:") ||
+    code.includes("processInput") ||
+    code.split("\n").length < 10
+  );
 }
 
 function isGarbageCode(code: string): boolean {
@@ -42,20 +85,33 @@ function isGarbageCode(code: string): boolean {
   );
 }
 
-export async function runOrchestrator(userTask: string): Promise<OrchestratorResult> {
+export async function runOrchestrator(userTask: string, explicitType: TaskType | null = null): Promise<OrchestratorResult> {
   const config = getConfig();
-  const mode = classifyTask(userTask);
+  const taskType = resolveTaskType(userTask, explicitType);
 
   console.log(chalk.bold.cyan('\n╔══════════════════════════════════════╗'));
   console.log(chalk.bold.cyan('║  🎯 Orchestrator                    ║'));
   console.log(chalk.bold.cyan(`╠══════════════════════════════════════╣`));
-  console.log(chalk.bold.cyan(`║  Mode: ${mode.padEnd(29)}║`));
+  console.log(chalk.bold.cyan(`║  Mode: ${taskType.padEnd(29)}║`));
   console.log(chalk.bold.cyan('╚══════════════════════════════════════╝'));
 
   const ctx: AgentContext = {
     userTask,
+    taskType,
     iterationCount: 0,
   };
+
+  // ANALYZE モードはPlanner+Reviewerのみ（Coder/Fixer不要）
+  if (taskType === 'ANALYZE') {
+    const plannerResult = await runPlannerAgent(ctx);
+    const reviewerResult = await runReviewerAgent({ ...ctx, code: userTask });
+    return {
+      finalCode: reviewerResult.output,
+      plan: plannerResult.output,
+      iterations: 0,
+      approved: true,
+    };
+  }
 
   // ─── Step 1: Planner ───────────────────────────────────────────
   const plannerResult = await runPlannerAgent(ctx);
@@ -77,6 +133,7 @@ export async function runOrchestrator(userTask: string): Promise<OrchestratorRes
   }
 
   // ─── Step 3: Review → Fix loop ────────────────────────────────
+
   let approved = false;
   let finalCode = ctx.code;
 
@@ -85,6 +142,13 @@ export async function runOrchestrator(userTask: string): Promise<OrchestratorRes
 
     const reviewerResult = await runReviewerAgent(ctx);
     const review = parseReviewResult(reviewerResult.output);
+
+    if (review.approved && isWeakOutput(ctx.code ?? "")) {
+      console.log("⚠️ 弱いコード検知 → 強制リジェクト");
+
+      review.approved = false;
+      review.issues.push("コードが不十分またはダミー");
+    }
 
     // fallback
     if (!review.priority_fixes) {

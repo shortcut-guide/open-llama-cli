@@ -173,3 +173,32 @@ export async function handleCommand(
 
   return false;
 }
+
+export type TaskType = 'NEW' | 'REFACTOR' | 'FIX' | 'EXTEND' | 'ANALYZE' | null;
+export interface AgentCommand {
+  type: TaskType;
+  rawInput: string;
+}
+const VALID_TYPES: TaskType[] = ['NEW', 'REFACTOR', 'FIX', 'EXTEND', 'ANALYZE'];
+export function parseAgentCommand(input: string): AgentCommand {
+  // "/agent refactor" → "REFACTOR"
+  // "/agent" のみ → null (自動判断)
+  const parts = input.split(/\s+/);
+  const typeArg = parts[1]?.toUpperCase() as TaskType;
+
+  if (VALID_TYPES.includes(typeArg)) {
+    return { type: typeArg, rawInput: input };
+  }
+
+  // 未知のサブコマンドの場合は警告
+  if (parts[1] && !VALID_TYPES.includes(typeArg)) {
+    console.log(chalk.yellow(
+      `⚠️  不明なタイプ "${parts[1]}" → 自動判断モードで実行します`
+    ));
+    console.log(chalk.gray(
+      `  利用可能: /agent new | refactor | fix | extend | analyze`
+    ));
+  }
+
+  return { type: null, rawInput: input };
+}

@@ -1,8 +1,9 @@
 // src/agents/types.ts
 import type { Message } from '../model/llm.js';
-
+export type TaskType = 'NEW' | 'REFACTOR' | 'FIX' | 'EXTEND' | 'ANALYZE';
 export interface AgentContext {
   userTask: string;
+  taskType?: TaskType;
   plan?: string;
   code?: string;
   reviewResult?: ReviewResult;
@@ -17,6 +18,13 @@ export interface ReviewResult {
   issues: string[];
   suggestions: string[];
   priority_fixes?: string[];
+  fileCount?: number;
+  directoryCheck?: {
+    types?: boolean;
+    services?: boolean;
+    hooks?: boolean;
+    components?: boolean;
+  };
   raw: string;
 }
 

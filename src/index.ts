@@ -17,6 +17,7 @@ import {
   setAutoWrite,
   getPendingFileContext,
   clearPendingFileContext,
+  parseAgentCommand,
 } from './controller/command.js';
 import { handleFileEditProposals } from './controller/fileProposal.js';
 import {
@@ -71,15 +72,14 @@ async function main(): Promise<void> {
 
     // ─── /agent コマンド: Multi-Agent Orchestrator ───────────────
     if (userInput.trim().startsWith('/agent')) {
-      const task = await readMultiline(rl);
+      const parsed = parseAgentCommand(userInput.trim());
+      // parsed = { type: 'REFACTOR' | 'NEW' | 'FIX' | 'EXTEND' | null }
 
-      if (!task.trim()) {
-        console.log("空です");
-        continue;
-      }
+      const task = await readMultiline(rl);
+      if (!task.trim()) { console.log("空です"); continue;}
 
       try {
-        const result = await runOrchestrator(task);
+        const result = await runOrchestrator(task,parsed.type);
         // Orchestratorの最終コードをhistoryに追記してファイルブロック処理
         history.push({ role: 'user', content: `[Multi-Agent Task] ${task}` });
         history.push({ role: 'assistant', content: result.finalCode });
