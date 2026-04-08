@@ -121,7 +121,7 @@ async function main(): Promise<void> {
 
 async function readMultiline(rl: readline.Interface): Promise<string> {
   return new Promise((resolve) => {
-    console.log("📝 複数行入力モード（/endで送信）");
+    console.log("\n📝 複数行入力モード（/endで送信）\n");
 
     let lines: string[] = [];
 
