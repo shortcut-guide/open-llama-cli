@@ -1,6 +1,6 @@
 // src/agents/types.ts
 import type { Message } from '../model/llm.js';
-export type TaskType = 'NEW' | 'REFACTOR' | 'FIX' | 'EXTEND' | 'ANALYZE';
+export type TaskType = 'new' | 'refactor' | 'fix' | 'extend' | 'analyze';
 export interface AgentContext {
   userTask: string;
   taskType?: TaskType;

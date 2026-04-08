@@ -31,23 +31,23 @@ function resolveTaskType(userTask: string, explicit: TaskType | null): TaskType 
 
   const patterns: { type: TaskType; keywords: string[] }[] = [
     {
-      type: 'FIX',
+      type: 'fix',
       keywords: ['バグ', '修正', 'エラー', 'fix', 'bug', 'error', 'broken', '直して']
     },
     {
-      type: 'REFACTOR',
+      type: 'refactor',
       keywords: ['リファクタ', 'リファクタリング', 'refactor', '整理', '改善', 'clean']
     },
     {
-      type: 'EXTEND',
+      type: 'extend',
       keywords: ['追加', '拡張', 'add', 'extend', '機能追加', 'feature']
     },
     {
-      type: 'ANALYZE',
+      type: 'analyze',
       keywords: ['分析', 'レビュー', 'analyze', 'review', '確認', 'check']
     },
     {
-      type: 'NEW',
+      type: 'new',
       keywords: ['作成', '新規', '実装', 'create', 'implement', 'build', 'write', 'generate', 'new']
     },
   ];
@@ -60,8 +60,8 @@ function resolveTaskType(userTask: string, explicit: TaskType | null): TaskType 
   }
 
   // デフォルト
-  console.log(chalk.gray(`  🤖 TaskType: NEW (デフォルト)`));
-  return 'NEW';
+  console.log(chalk.gray(`  🤖 TaskType: new (デフォルト)`));
+  return 'new';
 }
 
 function isWeakOutput(code: string): boolean {
@@ -102,7 +102,7 @@ export async function runOrchestrator(userTask: string, explicitType: TaskType |
   };
 
   // ANALYZE モードはPlanner+Reviewerのみ（Coder/Fixer不要）
-  if (taskType === 'ANALYZE') {
+  if (taskType === 'analyze') {
     const plannerResult = await runPlannerAgent(ctx);
     const reviewerResult = await runReviewerAgent({ ...ctx, code: userTask });
     return {

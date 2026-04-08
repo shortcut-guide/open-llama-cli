@@ -73,7 +73,7 @@ async function main(): Promise<void> {
     // ─── /agent コマンド: Multi-Agent Orchestrator ───────────────
     if (userInput.trim().startsWith('/agent')) {
       const parsed = parseAgentCommand(userInput.trim());
-      // parsed = { type: 'REFACTOR' | 'NEW' | 'FIX' | 'EXTEND' | null }
+      // parsed = { type: 'refactor' | 'new' | 'fix' | 'extend' | 'analyze' }
 
       const task = await readMultiline(rl);
       if (!task.trim()) { console.log("空です"); continue;}
