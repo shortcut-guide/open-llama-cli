@@ -5,108 +5,67 @@ import { callLLM, type Message } from '../model/llm.js';
 import type { AgentContext, AgentResult, TaskType } from './types.js';
 
 const CODER_SYSTEM_PROMPT = `
-You are a precise and conservative Refactoring Engineer.
-Your mission is to extract code and make it standalone WITHOUT changing its original behavior or design.
+You are a Ruthless React Refactoring Engineer.
+Your mission is to extract ONLY what is requested and DELETE EVERYTHING ELSE.
 
-# CRITICAL PROHIBITIONS (NEVER DO THESE)
-- DO NOT invent or hallucinate imports (e.g., importing HTML tags like 'div' or 'className' from 'react').
-- DO NOT change the UI, styling, CSS classes, or add emojis unless explicitly requested.
-- DO NOT remove DOM wrapper elements (like <Link>) or event handlers (like onError, onClick).
-- DO NOT break existing functionality.
+# CRITICAL RULES
+1. NEVER output a full copy of the source code unless specifically asked to.
+2. NEVER duplicate type/interface definitions (like \`type Product = {...}\`) if they are meant to be in a \`types.ts\` file. Use \`import\` instead.
+3. When extracting a sub-component from a file with \`if/else\` layout branches, DO NOT copy the branches. Extract the core JSX elements and merge them into a simple, single return statement.
+4. Your output MUST start exactly with: \`\`\`file:<target_path>\`\`\`
 `.trim();
 
 export async function runCoderAgent(ctx: AgentContext): Promise<AgentResult> {
-  const taskType: TaskType = ctx.taskType ?? 'refactor';
-
-  let confirmedSourcePath = 'Not Specified';
-  if (ctx.sourcePath && fs.existsSync(ctx.sourcePath)) {
-    confirmedSourcePath = ctx.sourcePath;
-  } else if (ctx.userTask) {
-    const match = ctx.userTask.match(/(?:\/Users|\/home|\.\/|\/)\S+\.tsx?/);
-    if (match && fs.existsSync(match[0])) {
-      confirmedSourcePath = match[0];
-    }
-  }
-
-  let targetPath: string = 'unknown_file.tsx';
+  let targetPath = 'unknown.tsx';
+  let extractFocus = 'Extract logic.';
   try {
-    const planObj = typeof ctx.plan === 'string' && ctx.plan.trim().startsWith('{') 
-      ? JSON.parse(ctx.plan) 
-      : ctx.plan;
-    targetPath = (typeof planObj === 'object' && planObj !== null && 'file' in planObj) 
-      ? String(planObj.file) 
-      : String(planObj);
-  } catch {
-    targetPath = String(ctx.plan);
-  }
-  
-  if (!targetPath || targetPath === 'undefined') targetPath = 'unknown_file.tsx';
+    const planObj = JSON.parse(ctx.plan || '{}');
+    targetPath = planObj.file || targetPath;
+    extractFocus = planObj.extractFocus || extractFocus;
+  } catch { targetPath = ctx.plan || targetPath; }
 
-  console.log(chalk.bold.blue('\n╔══════════════════════════════════════╗'));
-  console.log(chalk.bold.blue('║  💻 Coder Agent (Conservative Mode) ║'));
-  console.log(chalk.bold.blue('╠══════════════════════════════════════╣'));
-  console.log(chalk.bold.blue(`║  Source: ${confirmedSourcePath.split('/').pop()?.padEnd(27) ?? 'Unknown'}║`));
-  console.log(chalk.bold.blue(`║  Target: ${targetPath.padEnd(27)}║`));
-  console.log(chalk.bold.blue('╚══════════════════════════════════════╝'));
+  console.log(chalk.bold.blue(`\n  💻 Coder Agent -> Target: ${targetPath.split('/').pop()}`));
 
-  function buildUserPrompt(ctx: AgentContext, target: string, source: string): string {
+  function buildUserPrompt(): string {
     return `
-# ABSOLUTE TRUTH
-- SOURCE FILE: ${source}
-- TARGET PATH: ${target}
-
-# TASK: SAFE EXTRACTION
-Extract the provided SOURCE CONTENT into a fully functional file at TARGET PATH.
-Keep the exact same visual design, UI elements, and interactions.
-
-# SOURCE CONTENT (RAW EXTRACT)
+# SOURCE CONTENT
 ${ctx.sourceCode ?? 'N/A'}
 
-# REFACTORING REQUIREMENTS (CRITICAL)
-1. PRESERVE ALL functionality. Keep all 'onError', 'onClick', '<Link>' tags exactly as they operate.
-2. DO NOT hallucinate imports. 'react' only exports hooks and standard React APIs. 
-3. Define proper TypeScript interfaces/types for all Props.
-4. Add missing legitimate imports (like 'next/link').
+# TASK INSTRUCTIONS (CRITICAL)
+Target File: ${targetPath}
+Instructions: ${extractFocus}
 
-# OUTPUT FORMAT
-Your output MUST start exactly with: \`\`\`file:${target}\`\`\`
+-> IF EXTRACTING: Be ruthless. Output ONLY the parts mentioned in the instructions. DO NOT define types; import them.
+-> IF REBUILDING MAIN WRAPPER: Completely rewrite it to import and use the new sub-components. Replace the old bloated JSX with clean component tags (e.g., \`<ImageDisplay product={product} />\`).
+
+Your output MUST be ONLY a single markdown code block starting with: \`\`\`file:${targetPath}\`\`\`
 `.trim();
   }
 
-  const messages: Message[] = [
-    { role: 'user', content: buildUserPrompt(ctx, targetPath, confirmedSourcePath) },
-  ];
+  const messages: Message[] = [{ role: 'user', content: buildUserPrompt() }];
 
   if (ctx.reviewResult && !ctx.reviewResult.approved) {
     messages.push({ role: 'assistant', content: ctx.code ?? '' });
-    messages.push({
-      role: 'user',
-      content: `
-# REFIX REQUIRED
-Reviewer rejected your code for these reasons:
-${ctx.reviewResult.issues.join('\n')}
-
-# STRICT INSTRUCTION
-- Header MUST be: \`\`\`file:${targetPath}\`\`\`
-- FIX the hallucinated imports, missing event handlers, or broken UI structures.
-`.trim()
-    });
+    
+    let refixContent = `# REFIX REQUIRED\n[Issues]:\n${ctx.reviewResult.issues.join('\n')}`;
+    if (ctx.reviewResult.hints && ctx.reviewResult.hints.length > 0) {
+      refixContent += `\n\n# REVIEWER HINTS (USE THESE):\n${ctx.reviewResult.hints.join('\n')}`;
+    }
+    refixContent += `\n\nOutput ONLY the corrected markdown code block starting with \`\`\`file:${targetPath}\`\`\``;
+    
+    messages.push({ role: 'user', content: refixContent });
   }
 
   const output = await callLLM(messages, {
     printStream: true,
     label: '💻 Coder',
     systemPrompt: CODER_SYSTEM_PROMPT,
-    temperature: 0.0, // 幻覚（ハルシネーション）を防ぐため、揺らぎを完全にゼロにする
+    temperature: 0.1, 
   });
 
   return {
     agentName: 'Coder',
     output,
-    messages: [
-      { role: 'system', content: CODER_SYSTEM_PROMPT },
-      ...messages,
-      { role: 'assistant', content: output }
-    ],
+    messages: [{ role: 'system', content: CODER_SYSTEM_PROMPT }, ...messages, { role: 'assistant', content: output }],
   };
 }

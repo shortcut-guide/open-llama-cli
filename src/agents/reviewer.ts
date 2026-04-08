@@ -3,52 +3,45 @@ import chalk from 'chalk';
 import { callLLM, type Message } from '../model/llm.js';
 import type { AgentContext, AgentResult, ReviewResult } from './types.js';
 
-const REVIEWER_SYSTEM_PROMPT = `あなたは極めて厳格なシニアコードレビュアーです。
-今回のタスクは「コードの抽出・リファクタリング」であり、「機能やデザインの変更」ではありません。
+const REVIEWER_SYSTEM_PROMPT = `あなたは極めて厳格かつ親切なシニアコードレビュアーです。
 
 【承認条件 - すべてを満たさない限り approved=false】
-1. パス一致チェック
-   - 生成されたファイルのコードブロックのヘッダーパス（file:...）が、Planの Target Path と完全に一致しているか。
+1. 丸コピの絶対禁止（最重要）
+   - サブコンポーネント（画像や情報）の抽出において、元コードが丸ごとコピーされていないか？
+   - 例: 画像コンポの抽出なのに「price」や「review」などの無関係なコードが含まれていたら即FAIL。
+   - 例: 情報コンポの抽出なのに「img」タグが含まれていたら即FAIL。
 
-2. 構文・幻覚（ハルシネーション）チェック（最重要）
-   - ReactからHTMLタグ（div, img等）やCSSクラス（flex, className等）をimportするような、あり得ない構文が存在しないか？（あれば即FAIL）
-   - 未定義の変数が使用されていないか？
-
-3. ロジックとイベントハンドラの欠落チェック
-   - 元コードに存在した重要なイベントハンドラ（onError, onClick等）が勝手に削除されていないか？
-   - Linkタグによるルーティングなど、主要な機能がdiv等に置き換えられ破壊されていないか？
-
-4. UI/デザインの無断変更チェック
-   - 抽出元のUIデザイン、CSSクラス（Tailwind等）、DOM構造を勝手に大幅変更していないか？（頼まれていない絵文字の追加などはFAIL）
+2. 統合タスクの正確性（メインコンポーネントの場合）
+   - サブコンポーネントを \`import\` し、JSX内で \`<SubComponent />\` のように正しく呼び出しているか？
+   - 元のインラインの長いUIが残ったままならFAIL。
 
 【出力形式（JSON厳守）】
-以下のフォーマットに従い、エラー内容は必ず「あなたの言葉で具体的に」記述してください。
+以下のフォーマットに従い記述してください。
+※ Coderがそのままコピー＆ペーストして使える【完全な修正コード】を \`hints\` 配列に記述してください。「...」などの省略記号は絶対に使用しないでください（ハルシネーションの原因になります）。
 
 \`\`\`json
 {
   "approved": false,
   "issues": [
-    "<Reactからの不正なimportがあります。divやclassNameはimportできません。>",
-    "<onErrorハンドラが削除されており、エラー時のフォールバックが機能しません。>",
-    "<Linkコンポーネントがdivに変更されており、ナビゲーションが破壊されています。>"
+    "画像コンポーネントの抽出ですが、無関係な価格(price)や名前(name)、<Link>ラッパーが残っています（丸コピ状態です）。"
   ],
-  "suggestions": []
+  "suggestions": [
+    "画像とフォールバックのUIだけを残し、それ以外をすべて削除してください。"
+  ],
+  "hints": [
+    "import React, { useState } from 'react';\\nimport { Product } from './types';\\n\\nexport default function ProductCardImage({ product }: { product: Product }) {\\n  const [imageError, setImageError] = useState(false);\\n\\n  return (\\n    <div className=\\"w-28 h-28 shrink-0\\">\\n      {product.imageUrl && !imageError ? (\\n        <img src={product.imageUrl} alt={product.name} onError={() => setImageError(true)} className=\\"object-cover w-full h-full rounded\\" />\\n      ) : (\\n        <div className=\\"w-full h-full bg-gray-200 rounded flex items-center justify-center text-gray-500\\">📦</div>\\n      )}\\n    </div>\\n  );\\n}\\n"
+  ]
 }
 \`\`\``;
 
 export async function runReviewerAgent(ctx: AgentContext): Promise<AgentResult> {
-  console.log(chalk.bold.yellow('\n╔══════════════════════════════════════╗'));
-  console.log(chalk.bold.yellow('║  🔍 Reviewer Agent (Strict Mode)    ║'));
-  console.log(chalk.bold.yellow('╚══════════════════════════════════════╝'));
-
   const codeToReview = ctx.fixedCode ?? ctx.code ?? '';
-
   const messages: Message[] = [
     { role: 'system', content: REVIEWER_SYSTEM_PROMPT },
     {
       role: 'user',
       content:`
-## プラン (Target Path & Extract Info)
+## プラン (Target Path & Extract Focus)
 ${ctx.plan}
 
 ## 元コード (Source Material)
@@ -66,52 +59,31 @@ ${codeToReview}
   try {
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('JSON not found');
-    const parsed = JSON.parse(jsonMatch[0]);
-    reviewResult = {
-      approved: Boolean(parsed.approved),
-      issues: Array.isArray(parsed.issues) ? parsed.issues : [],
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
-      fileCount: parsed.file_count ?? 0,
-      directoryCheck: parsed.directory_check ?? {},
-      raw,
-    };
+    reviewResult = JSON.parse(jsonMatch[0]);
+    if (!reviewResult.hints) reviewResult.hints = [];
   } catch {
-    const lowerRaw = raw.toLowerCase();
-    reviewResult = {
-      approved: lowerRaw.includes('approved') || lowerRaw.includes('問題なし'),
-      issues: ['レビュー結果のパースに失敗しました。手動確認を推奨します。'],
-      suggestions: [],
-      fileCount: 0,
-      directoryCheck: {},
-      raw,
-    };
+    reviewResult = { approved: false, issues: ['パース失敗'], suggestions: [], hints: [], raw };
   }
 
   if (reviewResult.approved) {
     console.log(chalk.green('\n  ✅ レビュー結果: 承認'));
   } else {
     console.log(chalk.red(`\n  ❌ レビュー結果: 要修正 (イテレーション ${ctx.iterationCount})`));
-    if (reviewResult.issues.length > 0) {
-      console.log(chalk.red('  問題点:'));
-      reviewResult.issues.forEach((i) => console.log(chalk.red(`    - ${i}`)));
-    }
-    if (reviewResult.suggestions.length > 0) {
-      console.log(chalk.yellow('  改善提案:'));
-      reviewResult.suggestions.forEach((s) => console.log(chalk.yellow(`    - ${s}`)));
+    reviewResult.issues?.forEach((i) => console.log(chalk.red(`    - ${i}`)));
+    
+    // 🔥 ヒントの全文をターミナルに表示するように修正
+    if (reviewResult.hints && reviewResult.hints.length > 0) {
+      console.log(chalk.cyan('    💡 ヒント (Code Snippets):'));
+      reviewResult.hints.forEach((h) => {
+        console.log(chalk.cyan('      ' + h.trim().split('\n').join('\n      ')));
+      });
     }
   }
 
-  return {
-    agentName: 'Reviewer',
-    output: JSON.stringify(reviewResult),
-    messages: [...messages, { role: 'assistant', content: raw }],
-  };
+  return { agentName: 'Reviewer', output: JSON.stringify(reviewResult), messages: [...messages, { role: 'assistant', content: raw }] };
 }
 
 export function parseReviewResult(output: string): ReviewResult {
-  try {
-    return JSON.parse(output);
-  } catch {
-    return { approved: false, issues: ['parse error'], suggestions: [], raw: output };
-  }
+  try { return JSON.parse(output); } 
+  catch { return { approved: false, issues: [], suggestions: [], hints: [], raw: output }; }
 }

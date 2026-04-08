@@ -19,6 +19,7 @@ export interface ReviewResult {
   approved: boolean;
   issues: string[];
   suggestions: string[];
+  hints?: string[];
   priority_fixes?: string[];
   fileCount?: number;
   directoryCheck?: {
