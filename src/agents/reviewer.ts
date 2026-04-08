@@ -3,29 +3,42 @@ import chalk from 'chalk';
 import { callLLM, type Message } from '../model/llm.js';
 import type { AgentContext, AgentResult, ReviewResult } from './types.js';
 
-const REVIEWER_SYSTEM_PROMPT = `あなたはコードの完成判定を行います。
+const REVIEWER_SYSTEM_PROMPT = `あなたは極めて厳格なシニアコードレビュアーです。
+今回のタスクは「コードの抽出・リファクタリング」であり、「機能やデザインの変更」ではありません。
 
-【判定】
-1. 実行可能か
-2. ユーザー要求を満たしているか
-3. ダミーコードではないか
+【承認条件 - すべてを満たさない限り approved=false】
+1. パス一致チェック
+   - 生成されたファイルのコードブロックのヘッダーパス（file:...）が、Planの Target Path と完全に一致しているか。
 
-【NG例】
-- 汎用サンプルコード
-- 意味のない関数
-- 要求と無関係
+2. 構文・幻覚（ハルシネーション）チェック（最重要）
+   - ReactからHTMLタグ（div, img等）やCSSクラス（flex, className等）をimportするような、あり得ない構文が存在しないか？（あれば即FAIL）
+   - 未定義の変数が使用されていないか？
 
-【出力】
+3. ロジックとイベントハンドラの欠落チェック
+   - 元コードに存在した重要なイベントハンドラ（onError, onClick等）が勝手に削除されていないか？
+   - Linkタグによるルーティングなど、主要な機能がdiv等に置き換えられ破壊されていないか？
+
+4. UI/デザインの無断変更チェック
+   - 抽出元のUIデザイン、CSSクラス（Tailwind等）、DOM構造を勝手に大幅変更していないか？（頼まれていない絵文字の追加などはFAIL）
+
+【出力形式（JSON厳守）】
+以下のフォーマットに従い、エラー内容は必ず「あなたの言葉で具体的に」記述してください。
+
+\`\`\`json
 {
-  "approved": true/false,
-  "issues": [],
-  "priority_fixes": []
+  "approved": false,
+  "issues": [
+    "<Reactからの不正なimportがあります。divやclassNameはimportできません。>",
+    "<onErrorハンドラが削除されており、エラー時のフォールバックが機能しません。>",
+    "<Linkコンポーネントがdivに変更されており、ナビゲーションが破壊されています。>"
+  ],
+  "suggestions": []
 }
-`;
+\`\`\``;
 
 export async function runReviewerAgent(ctx: AgentContext): Promise<AgentResult> {
   console.log(chalk.bold.yellow('\n╔══════════════════════════════════════╗'));
-  console.log(chalk.bold.yellow('║  🔍 Reviewer Agent                  ║'));
+  console.log(chalk.bold.yellow('║  🔍 Reviewer Agent (Strict Mode)    ║'));
   console.log(chalk.bold.yellow('╚══════════════════════════════════════╝'));
 
   const codeToReview = ctx.fixedCode ?? ctx.code ?? '';
@@ -34,17 +47,21 @@ export async function runReviewerAgent(ctx: AgentContext): Promise<AgentResult> 
     { role: 'system', content: REVIEWER_SYSTEM_PROMPT },
     {
       role: 'user',
-      content:
-        `以下のコードをレビューしてください：\n\n` +
-        `## タスク概要\n${ctx.userTask}\n\n` +
-        (ctx.plan ? `## 実装計画\n${ctx.plan}\n\n` : '') +
-        `## レビュー対象コード\n\`\`\`\n${codeToReview}\n\`\`\``,
+      content:`
+## プラン (Target Path & Extract Info)
+${ctx.plan}
+
+## 元コード (Source Material)
+${ctx.sourceCode ?? 'N/A'}
+
+## レビュー対象コード
+${codeToReview}
+`.trim(),
     },
   ];
 
   const raw = await callLLM(messages, { printStream: false });
 
-  // JSONパース（LLMが余分なテキストを含む場合に対応）
   let reviewResult: ReviewResult;
   try {
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -54,20 +71,22 @@ export async function runReviewerAgent(ctx: AgentContext): Promise<AgentResult> 
       approved: Boolean(parsed.approved),
       issues: Array.isArray(parsed.issues) ? parsed.issues : [],
       suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+      fileCount: parsed.file_count ?? 0,
+      directoryCheck: parsed.directory_check ?? {},
       raw,
     };
   } catch {
-    // パース失敗時はテキスト内容から承認判断
     const lowerRaw = raw.toLowerCase();
     reviewResult = {
       approved: lowerRaw.includes('approved') || lowerRaw.includes('問題なし'),
       issues: ['レビュー結果のパースに失敗しました。手動確認を推奨します。'],
       suggestions: [],
+      fileCount: 0,
+      directoryCheck: {},
       raw,
     };
   }
 
-  // レビュー結果を表示
   if (reviewResult.approved) {
     console.log(chalk.green('\n  ✅ レビュー結果: 承認'));
   } else {

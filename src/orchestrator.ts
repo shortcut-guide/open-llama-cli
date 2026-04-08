@@ -1,208 +1,190 @@
 // src/orchestrator.ts
+
 import chalk from 'chalk';
 import { getConfig } from './config.js';
-import { runPlannerAgent } from './agents/planner.js';
+
+import { runAnalyzer } from './agents/analyzer.js';
+import { runMicroPlanner } from './agents/planner.js';
 import { runCoderAgent } from './agents/coder.js';
 import { runReviewerAgent, parseReviewResult } from './agents/reviewer.js';
-import { runFixerAgent } from './agents/fixer.js';
-import type { AgentContext,TaskType } from './agents/types.js';
+
+import type { AgentContext, TaskType } from './agents/types.js';
 
 export interface OrchestratorResult {
   finalCode: string;
-  plan: string;
   iterations: number;
   approved: boolean;
 }
 
 /**
- * タスク文字列からAgent実行モードを判断する
- * - "simple": Planner不要の単純質問
- * - "code": フルAgent pipeline
+ * タスクタイプ判定
  */
 function resolveTaskType(userTask: string, explicit: TaskType | null): TaskType {
-  // 明示指定があればそのまま使用
   if (explicit) {
     console.log(chalk.cyan(`  📌 TaskType: ${explicit} (明示指定)`));
     return explicit;
   }
 
-  // 自動推定ロジック
   const lower = userTask.toLowerCase();
 
-  const patterns: { type: TaskType; keywords: string[] }[] = [
-    {
-      type: 'fix',
-      keywords: ['バグ', '修正', 'エラー', 'fix', 'bug', 'error', 'broken', '直して']
-    },
-    {
-      type: 'refactor',
-      keywords: ['リファクタ', 'リファクタリング', 'refactor', '整理', '改善', 'clean']
-    },
-    {
-      type: 'extend',
-      keywords: ['追加', '拡張', 'add', 'extend', '機能追加', 'feature']
-    },
-    {
-      type: 'analyze',
-      keywords: ['分析', 'レビュー', 'analyze', 'review', '確認', 'check']
-    },
-    {
-      type: 'new',
-      keywords: ['作成', '新規', '実装', 'create', 'implement', 'build', 'write', 'generate', 'new']
-    },
-  ];
+  if (lower.includes('リファクタ') || lower.includes('refactor')) return 'refactor';
+  if (lower.includes('修正') || lower.includes('fix') || lower.includes('error')) return 'fix';
+  if (lower.includes('分析') || lower.includes('analyze')) return 'analyze';
 
-  for (const pattern of patterns) {
-    if (pattern.keywords.some((kw) => lower.includes(kw))) {
-      console.log(chalk.gray(`  🤖 TaskType: ${pattern.type} (自動推定)`));
-      return pattern.type;
-    }
-  }
-
-  // デフォルト
-  console.log(chalk.gray(`  🤖 TaskType: new (デフォルト)`));
   return 'new';
 }
 
-function isWeakOutput(code: string): boolean {
-  return (
-    code.length < 120 ||
-    !code.includes("file:") ||
-    code.includes("processInput") ||
-    code.split("\n").length < 10
-  );
-}
-
+/**
+ * ダミーコード検知
+ */
 function isGarbageCode(code: string): boolean {
   if (!code) return true;
 
   return (
-    code.length < 80 || // 短すぎ
-    code.includes("processInput") ||
-    code.includes("validateInput") ||
-    code.includes("main()") ||
-    !code.includes("file:") // フォーマット違反
+    code.length < 80 ||
+    code.includes('Sample') ||
+    code.includes('TODO') ||
+    !code.includes('file:')
   );
 }
 
-export async function runOrchestrator(userTask: string, explicitType: TaskType | null = null): Promise<OrchestratorResult> {
+/**
+ * メインOrchestrator
+ */
+export async function runOrchestrator(
+  userTask: string,
+  code: string,
+  filePath: string,
+  explicitType: TaskType | null = null
+): Promise<OrchestratorResult> {
   const config = getConfig();
   const taskType = resolveTaskType(userTask, explicitType);
 
+  // 空コードガード
+  if (!code.trim()) {
+    throw new Error(
+      'コードが未指定です。先に /read <ファイルパス> でファイルを読み込んでください。'
+    );
+  }
+
   console.log(chalk.bold.cyan('\n╔══════════════════════════════════════╗'));
-  console.log(chalk.bold.cyan('║  🎯 Orchestrator                    ║'));
-  console.log(chalk.bold.cyan(`╠══════════════════════════════════════╣`));
-  console.log(chalk.bold.cyan(`║  Mode: ${taskType.padEnd(29)}║`));
+  console.log(chalk.bold.cyan('║  🎯 Orchestrator (Micro Pipeline)   ║'));
   console.log(chalk.bold.cyan('╚══════════════════════════════════════╝'));
 
-  const ctx: AgentContext = {
-    userTask,
-    taskType,
-    iterationCount: 0,
-  };
+  /**
+   * Step1: Analyzer（構造分解）
+   */
+  const analysis = await runAnalyzer({
+    code,
+    filePath,
+    llmUrl: config.LLM_API_URL,
+  });
 
-  // ANALYZE モードはPlanner+Reviewerのみ（Coder/Fixer不要）
-  if (taskType === 'analyze') {
-    const plannerResult = await runPlannerAgent(ctx);
-    const reviewerResult = await runReviewerAgent({ ...ctx, code: userTask });
-    return {
-      finalCode: reviewerResult.output,
-      plan: plannerResult.output,
-      iterations: 0,
-      approved: true,
-    };
-  }
+  let finalCode = '';
+  let approved = true;
+  let iterationCount = 0;
 
-  // ─── Step 1: Planner ───────────────────────────────────────────
-  const plannerResult = await runPlannerAgent(ctx);
-  ctx.plan = plannerResult.output;
+  /**
+   * Step2: 各関数ごとに処理（超重要）
+   */
+  for (const fn of analysis.functions) {
+    console.log(chalk.yellow(`\n🔍 Processing function: ${fn.name}`));
 
-  // ─── Step 2: Coder ────────────────────────────────────────────
-  const coderResult = await runCoderAgent(ctx);
-  ctx.code = coderResult.output;
-
-  if (isGarbageCode(ctx.code)) {
-    console.log("⚠️ ダミーコード検知 → 再生成");
-
-    const retry = await runCoderAgent({
-      ...ctx,
-      userTask: ctx.userTask + "\n\n具体的な実装をしろ。ダミーコード禁止。"
+    /**
+     * Step2-1: Micro Planner（1ファイルのみ）
+     */
+    const plan = await runMicroPlanner({
+      target: userTask,
+      functionInfo: fn,
+      filePath: analysis.path,
+      llmUrl: config.LLM_API_URL,
     });
 
-    ctx.code = retry.output;
-  }
+    // 🔥 修正ポイント: Analyzerの行数判定が狂うことがあるため、
+    // 切り出し(slice)を廃止し、ファイル全体のコードをそのままCoderに渡す
+    const targetCode = code;
 
-  // ─── Step 3: Review → Fix loop ────────────────────────────────
+    /**
+     * Step2-2: Coder（1ファイル生成）
+     */
+    const ctx: AgentContext = {
+      userTask,
+      taskType,
+      iterationCount: 0,
+      plan: JSON.stringify(plan),
+      sourceCode: targetCode,
+      sourcePath: analysis.path,
+    };
 
-  let approved = false;
-  let finalCode = ctx.code;
+    let coderResult = await runCoderAgent(ctx);
+    let codeOutput = coderResult.output;
 
-  for (let i = 0; i < config.MAX_REVIEW_ITERATIONS; i++) {
-    ctx.iterationCount = i + 1;
+    if (isGarbageCode(codeOutput)) {
+      console.log('⚠️ ダミーコード検知 → 再生成');
 
-    const reviewerResult = await runReviewerAgent(ctx);
-    const review = parseReviewResult(reviewerResult.output);
+      coderResult = await runCoderAgent({
+        ...ctx,
+        userTask: ctx.userTask + '\n\nダミー禁止。実装のみ出力せよ。',
+      });
 
-    if (review.approved && isWeakOutput(ctx.code ?? "")) {
-      console.log("⚠️ 弱いコード検知 → 強制リジェクト");
-
-      review.approved = false;
-      review.issues.push("コードが不十分またはダミー");
+      codeOutput = coderResult.output;
     }
 
-    // fallback
-    if (!review.priority_fixes) {
-      review.priority_fixes = review.issues.slice(0, 3);
-    }
+    /**
+     * Step2-3: Review loop（軽量）
+     */
+    let localApproved = false;
 
-    ctx.reviewResult = review;
+    for (let i = 0; i < config.MAX_REVIEW_ITERATIONS; i++) {
+      iterationCount++;
 
-    if (review.approved) {
-      approved = true;
-      console.log(chalk.bold.green(`\n  ✅ 承認済み (イテレーション ${i + 1}/${config.MAX_REVIEW_ITERATIONS})`));
-      break;
-    }
+      const reviewerResult = await runReviewerAgent({
+        ...ctx,
+        code: codeOutput,
+      });
 
-    if (i < config.MAX_REVIEW_ITERATIONS - 1) {
-      // Fixer で修正
-      ctx.priorityFixes = review.priority_fixes;
-      const fixerResult = await runFixerAgent(ctx);
-      ctx.fixedCode = fixerResult.output;
-      finalCode = fixerResult.output;
+      const review = parseReviewResult(reviewerResult.output);
 
-      if (isGarbageCode(finalCode)) {
-        console.log("⚠️ 修正後もダミー → 再生成");
+      if (review.approved) {
+        localApproved = true;
+        console.log(chalk.green(`  ✅ Approved (${fn.name})`));
+        break;
+      }
+
+      if (i < config.MAX_REVIEW_ITERATIONS - 1) {
+        console.log('🔧 再生成');
 
         const retry = await runCoderAgent({
           ...ctx,
-          userTask: ctx.userTask + "\n\n必ず実用的なコードを出せ。ダミー禁止。"
+          userTask:
+            ctx.userTask +
+            '\n\nレビュー指摘を修正し、完全なコードを出力せよ。',
         });
 
-        finalCode = retry.output;
+        codeOutput = retry.output;
       }
-    } else {
-      // 最大イテレーション到達
-      console.log(
-        chalk.yellow(
-          `\n  ⚠️ 最大イテレーション(${config.MAX_REVIEW_ITERATIONS})に達しました。最終コードを採用します。`
-        )
-      );
-      finalCode = ctx.fixedCode ?? ctx.code ?? '';
     }
+
+    if (!localApproved) {
+      approved = false;
+    }
+
+    finalCode += '\n\n' + codeOutput;
   }
 
-  // ─── 完了サマリ ────────────────────────────────────────────────
+  /**
+   * Summary
+   */
   console.log(chalk.bold.cyan('\n╔══════════════════════════════════════╗'));
   console.log(chalk.bold.cyan('║  📊 Orchestrator Summary            ║'));
   console.log(chalk.bold.cyan('╠══════════════════════════════════════╣'));
-  console.log(chalk.bold.cyan(`║  Iterations : ${String(ctx.iterationCount).padEnd(22)}║`));
+  console.log(chalk.bold.cyan(`║  Iterations : ${String(iterationCount).padEnd(22)}║`));
   console.log(chalk.bold.cyan(`║  Approved   : ${String(approved).padEnd(22)}║`));
   console.log(chalk.bold.cyan('╚══════════════════════════════════════╝\n'));
 
   return {
     finalCode,
-    plan: ctx.plan ?? '',
-    iterations: ctx.iterationCount,
+    iterations: iterationCount,
     approved,
   };
 }

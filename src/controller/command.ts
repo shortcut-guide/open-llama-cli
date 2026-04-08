@@ -107,14 +107,14 @@ export async function handleCommand(
   if (trimmed.startsWith('/agent')) {
     const parsed = parseAgentCommand(trimmed);
 
-    // ✅ 1行目からコマンド部分を除去して残りを取得
+    // 1行目からコマンド部分を除去して残りを取得
     const firstLineTask = trimmed
       .replace(/^\/agent\s*/, '')
       .replace(/^(new|refactor|fix|extend|analyze)\s*/, '');
 
     const multi = await readMultiline(rl);
 
-    // ✅ 1行目 + 複数行を結合
+    // 1行目 + 複数行を結合
     const task = [firstLineTask, multi].filter(Boolean).join('\n');
 
     if (!task.trim()) {
@@ -122,8 +122,31 @@ export async function handleCommand(
       return true;
     }
 
+    // pendingFileContext からコード・パスを取得
+    const pending = getPendingFileContext();
+    let agentCode = '';
+    let agentFilePath = '';
+
+    if (pending) {
+      // ```\ncode\n``` を抽出
+      const codeMatch = pending.match(/```\n([\s\S]*?)\n```/);
+      agentCode = codeMatch ? codeMatch[1] : '';
+
+      // 対象ファイル: `path` を抽出
+      const pathMatch = pending.match(/対象ファイル: `([^`]+)`/);
+      agentFilePath = pathMatch ? pathMatch[1] : '';
+
+      clearPendingFileContext();
+    }
+
     try {
-      const result = await runOrchestrator(task, parsed.type);
+      // 現在はファイルコンテキスト未指定のためダミー値を渡す
+      const result = await runOrchestrator(
+        task,
+        agentCode,
+        agentFilePath,
+        parsed.type
+      );
 
       ctx.history.push({
         role: 'user',

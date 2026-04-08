@@ -5,12 +5,14 @@ export interface AgentContext {
   userTask: string;
   taskType?: TaskType;
   plan?: string;
+  sourceCode?: string;
   code?: string;
   reviewResult?: ReviewResult;
   fixedCode?: string;
   iterationCount: number;
   fileTargets?: string[];
   priorityFixes?: string[];
+  sourcePath?: string;
 }
 
 export interface ReviewResult {

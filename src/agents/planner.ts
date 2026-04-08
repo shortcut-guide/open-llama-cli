@@ -1,48 +1,98 @@
 // src/agents/planner.ts
-import chalk from 'chalk';
-import { callLLM, type Message } from '../model/llm.js';
-import type { AgentContext, AgentResult } from './types.js';
 
-const PLANNER_SYSTEM_PROMPT = `あなたはソフトウェアアーキテクトです。
-ユーザーのタスクを受け取り、実装計画を立案します。
+import { callLLM } from "../model/llm.js";
+import { FunctionInfo } from "./analyzer.js";
 
-【出力形式】
-必ず以下のMarkdown形式で出力してください：
-
-## 目的
-（タスクの目的を1〜2文で）
-
-## 実装ステップ
-1. （ステップ1）
-2. （ステップ2）
-...
-
-## 対象ファイル
-- path/to/file.ts: （変更内容の概要）
-
-## 注意事項
-- （考慮すべき技術的な注意点）
-
-コードは書かないでください。計画のみを出力してください。`;
-
-export async function runPlannerAgent(ctx: AgentContext): Promise<AgentResult> {
-  console.log(chalk.bold.magenta('\n╔══════════════════════════════════════╗'));
-  console.log(chalk.bold.magenta('║  📋 Planner Agent                   ║'));
-  console.log(chalk.bold.magenta('╚══════════════════════════════════════╝'));
-
-  const messages: Message[] = [
-    { role: 'system', content: PLANNER_SYSTEM_PROMPT },
-    {
-      role: 'user',
-      content: `以下のタスクの実装計画を立案してください：\n\n${ctx.userTask}`,
-    },
-  ];
-
-  const output = await callLLM(messages, { printStream: true, label: '📋 Planner' });
-
-  return {
-    agentName: 'Planner',
-    output,
-    messages: [...messages, { role: 'assistant', content: output }],
+export type MicroPlan = {
+  file: string;
+  responsibility: string;
+  extractFrom: {
+    functionName: string;
+    startLine: number;
+    endLine: number;
   };
+  inputs: string[];
+  outputs: string[];
+  dependencies: string[];
+};
+
+export async function runMicroPlanner(params: {
+  target: string;
+  functionInfo: FunctionInfo;
+  filePath: string;
+  llmUrl: string;
+}): Promise<MicroPlan> {
+  const { target, functionInfo, filePath, llmUrl } = params;
+
+  const prompt = buildPlannerPrompt(target, functionInfo, filePath);
+
+  const messages = [{ role: "user", content: prompt }];
+
+  const text: string = await callLLM(messages, {
+    printStream: true,
+    temperature: 0.2,
+    maxTokens: 500,
+    label: "📋 Planner",
+  });
+
+  try {
+    const json = extractJSON(text);
+    return json;
+  } catch (e) {
+    console.error("Planner parse error:", text);
+    throw new Error("Planner failed to parse JSON");
+  }
+}
+
+function buildPlannerPrompt(
+  target: string,
+  fn: FunctionInfo,
+  filePath: string
+): string {
+  return `
+You are a micro planner.
+
+# CRITICAL RULES
+- ONLY plan ONE file
+- DO NOT create multiple files
+
+# DIRECTORY & PATH RULES (STRICT)
+- DO NOT force "src/components/" or any arbitrary directory.
+- If the user specifies a target path in the prompt, USE THAT EXACT PATH.
+- If refactoring in-place, the output "file" path MUST BE EXACTLY the same as the SOURCE FILE: "${filePath}"
+
+# TARGET (USER REQUEST)
+${target}
+
+# SOURCE FILE
+${filePath}
+
+# FUNCTION TO REFACTOR
+Name: ${fn.name}
+Lines: ${fn.startLine}-${fn.endLine}
+Description: ${fn.description}
+
+# OUTPUT FORMAT (STRICT JSON)
+{
+  "file": "${filePath}",
+  "responsibility": "single clear responsibility",
+  "extractFrom": {
+    "functionName": "${fn.name}",
+    "startLine": ${fn.startLine},
+    "endLine": ${fn.endLine}
+  },
+  "inputs": ["arg1"],
+  "outputs": ["string"],
+  "dependencies": ["react"]
+}
+`.trim();
+}
+
+function extractJSON(text: string) {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1) {
+    throw new Error("No JSON found");
+  }
+  return JSON.parse(text.slice(start, end + 1));
 }

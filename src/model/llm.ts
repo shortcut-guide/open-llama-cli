@@ -10,18 +10,28 @@ export type Message = { role: string; content: string };
  */
 export async function callLLM(
   history: Message[],
-  options: { printStream?: boolean; label?: string } = {}
+  options: { 
+    printStream?: boolean;
+    label?: string;
+    temperature?: number;
+    maxTokens?: number;
+    systemPrompt?: string;
+  } = {}
 ): Promise<string> {
   const { printStream = true, label = 'AI' } = options;
   const config = getConfig();
+  // システムプロンプトがある場合、履歴の先頭に挿入した新しい配列を作成
+  const messages = options.systemPrompt 
+    ? [{ role: 'system', content: options.systemPrompt }, ...history]
+    : history;
 
   const response = await fetch(config.LLM_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       messages: history,
-      temperature: config.TEMPERATURE,
-      max_tokens: config.MAX_TOKENS,
+      temperature: options.temperature ?? config.TEMPERATURE,
+      max_tokens: options.maxTokens ?? config.MAX_TOKENS,
       stream: true,
     }),
   });
