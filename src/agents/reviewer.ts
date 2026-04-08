@@ -29,6 +29,7 @@ const REVIEWER_SYSTEM_PROMPT = `あなたは極めて厳格かつ親切なシニ
     "画像とフォールバックのUIだけを残し、それ以外をすべて削除してください。"
   ],
   "hints": [
+    ※ hints配列にコードを書く際は、必ずダブルクォートをエスケープするか、JSONとして正しくパースできる形式に徹底してください。コードブロックのバッククォートも慎重に扱ってください。
     "import React, { useState } from 'react';\\nimport { Product } from './types';\\n\\nexport default function ProductCardImage({ product }: { product: Product }) {\\n  const [imageError, setImageError] = useState(false);\\n\\n  return (\\n    <div className=\\"w-28 h-28 shrink-0\\">\\n      {product.imageUrl && !imageError ? (\\n        <img src={product.imageUrl} alt={product.name} onError={() => setImageError(true)} className=\\"object-cover w-full h-full rounded\\" />\\n      ) : (\\n        <div className=\\"w-full h-full bg-gray-200 rounded flex items-center justify-center text-gray-500\\">📦</div>\\n      )}\\n    </div>\\n  );\\n}\\n"
   ]
 }
