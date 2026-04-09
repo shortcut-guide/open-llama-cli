@@ -1,12 +1,15 @@
 // src/gsd/orchestrator.ts
 import chalk from 'chalk';
+import { readFile, writeFile as fsWriteFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { getConfig } from '../config.js';
 import { callLLM } from '../model/llm.js';
 import { loadGsdSpec, initializeGsdProject, updateState, savePhaseArtifact } from './spec.js';
 import { runAnalyzer } from '../agents/analyzer.js';
-import { runPlanner, type MicroPlan } from '../agents/planner.js';
+import { runPlanner } from '../agents/planner.js';
 import { runCoderAgent } from '../agents/coder.js';
 import { runReviewerAgent, parseReviewResult } from '../agents/reviewer.js';
+import type { GsdTask } from '../agents/types.js';
 
 export async function gsdInitialize(userGoal: string): Promise<void> {
   console.log(chalk.bold.cyan('\n🚀 GSD Initialize Phase'));
@@ -78,10 +81,6 @@ Output each task using the XML format:
   console.log(chalk.green(`✅ Phase ${phaseNumber} plan saved.`));
 }
 
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import type { GsdTask } from '../agents/types.js';
-
 function parseXmlTasks(xml: string): GsdTask[] {
   const tasks: GsdTask[] = [];
   const taskRegex = /<task>([\s\S]*?)<\/task>/g;
@@ -104,9 +103,6 @@ function parseXmlTasks(xml: string): GsdTask[] {
   return tasks;
 }
 
-import { writeFile as fsWriteFile } from 'node:fs/promises';
-import { handleFileEditProposals } from '../controller/fileProposal.js';
-
 export async function gsdDiscussPhase(phaseNumber: string): Promise<void> {
   console.log(chalk.bold.cyan(`\n💬 GSD Discuss Phase ${phaseNumber}`));
   const config = getConfig();
@@ -118,7 +114,7 @@ Project: ${spec.project}
 Requirements: ${spec.requirements}
 Roadmap: ${spec.roadmap}
 
-Discuss implementation details, UI/UX preferences, and technical constraints for this phase.
+Discuss implementation details, UI/UX preferences, and technical CLI constraints for this phase.
 Output a summary of decisions as a CONTEXT document.
 `.trim();
 

@@ -66,14 +66,14 @@ async function readMultiline(rl: readline.Interface): Promise<string> {
 // ─────────────────────────────────────
 // Agent Command
 
-export type TaskType = 'new' | 'refactor' | 'fix' | 'extend' | 'analyze' | null;
+export type TaskType = 'new' | 'refactor' | 'fix' | 'extend' | 'analyze' | 'gsd' | null;
 
 export interface AgentCommand {
   type: TaskType;
   rawInput: string;
 }
 
-const VALID_TYPES: TaskType[] = ['new', 'refactor', 'fix', 'extend', 'analyze'];
+const VALID_TYPES: TaskType[] = ['new', 'refactor', 'fix', 'extend', 'analyze', 'gsd'];
 
 export function parseAgentCommand(input: string): AgentCommand {
   const parts = input.split(/\s+/);
@@ -105,41 +105,6 @@ export async function handleCommand(
 
   const trimmed = userInput.trim();
 
-  // ─── GSD Commands ─────────────────────
-  if (trimmed.startsWith('/gsd-new-project')) {
-    const goal = trimmed.replace('/gsd-new-project', '').trim();
-    if (!goal) {
-      console.log(chalk.yellow('Usage: /gsd-new-project <your project goal>'));
-      return true;
-    }
-    await gsdInitialize(goal);
-    return true;
-  }
-
-  if (trimmed.startsWith('/gsd-discuss-phase ')) {
-    const phase = trimmed.replace('/gsd-discuss-phase ', '').trim();
-    await gsdDiscussPhase(phase);
-    return true;
-  }
-
-  if (trimmed.startsWith('/gsd-plan-phase ')) {
-    const phase = trimmed.replace('/gsd-plan-phase ', '').trim();
-    await gsdPlanPhase(phase);
-    return true;
-  }
-
-  if (trimmed.startsWith('/gsd-execute-phase ')) {
-    const phase = trimmed.replace('/gsd-execute-phase ', '').trim();
-    await gsdExecutePhase(phase);
-    return true;
-  }
-
-  if (trimmed.startsWith('/gsd-verify-work ')) {
-    const phase = trimmed.replace('/gsd-verify-work ', '').trim();
-    await gsdVerifyWork(phase);
-    return true;
-  }
-
   // ─── /agent ─────────────────────
   if (trimmed.startsWith('/agent')) {
     const parsed = parseAgentCommand(trimmed);
@@ -147,7 +112,7 @@ export async function handleCommand(
     // 1行目からコマンド部分を除去して残りを取得
     const firstLineTask = trimmed
       .replace(/^\/agent\s*/, '')
-      .replace(/^(new|refactor|fix|extend|analyze)\s*/, '');
+      .replace(/^(new|refactor|fix|extend|analyze|gsd)\s*/, '');
 
     const multi = await readMultiline(rl);
 
@@ -173,11 +138,12 @@ export async function handleCommand(
       const pathMatch = pending.match(/対象ファイル: `([^`]+)`/);
       agentFilePath = pathMatch ? pathMatch[1] : '';
 
-      clearPendingFileContext();
+      if (parsed.type !== 'gsd') {
+        clearPendingFileContext();
+      }
     }
 
     try {
-      // 現在はファイルコンテキスト未指定のためダミー値を渡す
       const result = await runOrchestrator(
         task,
         agentCode,
@@ -187,7 +153,7 @@ export async function handleCommand(
 
       ctx.history.push({
         role: 'user',
-        content: `[Multi-Agent Task] ${task}`
+        content: `[Multi-Agent Task: ${parsed.type || 'auto'}] ${task}`
       });
 
       ctx.history.push({
@@ -197,12 +163,14 @@ export async function handleCommand(
 
       await saveHistory(ctx.history);
 
-      await handleFileEditProposals(
-        result.finalCode,
-        ctx.history,
-        rl,
-        getAutoWrite()
-      );
+      if (parsed.type !== 'gsd') {
+        await handleFileEditProposals(
+          result.finalCode,
+          ctx.history,
+          rl,
+          getAutoWrite()
+        );
+      }
 
     } catch (e: unknown) {
       console.error(
@@ -338,13 +306,9 @@ export async function handleCommand(
 ┌──────────────────────────────────────────────────────────────────┐
 │  コマンド一覧                                                      │
 ├────────────────────────────────┬─────────────────────────────────┤
-│  /gsd-new-project <goal>       │ GSDプロジェクト初期化             │
-│  /gsd-discuss-phase <N>        │ GSD議論フェーズ                   │
-│  /gsd-plan-phase <N>           │ GSD計画フェーズ                   │
-│  /gsd-execute-phase <N>        │ GSD実行フェーズ                   │
-│  /gsd-verify-work <N>          │ GSD検証フェーズ                   │
-│  /autowrite [on|off]           │ 自動書き込みトグル               │
+│  /agent gsd <subcmd> <args>    │ GSDモード (init|discuss|plan|...) │
 │  /agent <task>                 │ Multi-Agent モードで実行         │
+│  /autowrite [on|off]           │ 自動書き込みトグル               │
 │  /search <glob>                │ globでファイル検索               │
 │  /search <glob> --content <re> │ ファイル内容を正規表現検索       │
 │  /read <path>                  │ ファイル表示 + 次発言へ注入      │

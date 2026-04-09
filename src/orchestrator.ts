@@ -7,6 +7,7 @@ import { runAnalyzer } from './agents/analyzer.js';
 import { runPlanner } from './agents/planner.js';
 import { runCoderAgent } from './agents/coder.js';
 import { runReviewerAgent, parseReviewResult } from './agents/reviewer.js';
+import { gsdInitialize, gsdDiscussPhase, gsdPlanPhase, gsdExecutePhase, gsdVerifyWork } from './gsd/orchestrator.js';
 
 import type { AgentContext, TaskType, ReviewResult } from './agents/types.js';
 
@@ -22,10 +23,47 @@ export interface OrchestratorResult {
 function resolveTaskType(userTask: string, explicit: TaskType | null): TaskType {
   if (explicit) return explicit;
   const lower = userTask.toLowerCase();
+  if (lower.includes('gsd')) return 'gsd';
   if (lower.includes('リファクタ') || lower.includes('refactor') || lower.includes('分割')) return 'refactor';
   if (lower.includes('修正') || lower.includes('fix') || lower.includes('error')) return 'fix';
   if (lower.includes('分析') || lower.includes('analyze')) return 'analyze';
   return 'new';
+}
+
+/**
+ * GSDフローの実行
+ */
+async function runGsdFlow(userTask: string): Promise<OrchestratorResult> {
+  const parts = userTask.trim().split(/\s+/);
+  const subCommand = parts[0].toLowerCase();
+  const arg = parts.slice(1).join(' ');
+
+  switch (subCommand) {
+    case 'init':
+    case 'initialize':
+      await gsdInitialize(arg);
+      break;
+    case 'discuss':
+      await gsdDiscussPhase(arg);
+      break;
+    case 'plan':
+      await gsdPlanPhase(arg);
+      break;
+    case 'execute':
+      await gsdExecutePhase(arg);
+      break;
+    case 'verify':
+      await gsdVerifyWork(arg);
+      break;
+    default:
+      console.log(chalk.yellow(`不明なGSDサブコマンド: ${subCommand}. 使用法: /agent gsd [init|discuss|plan|execute|verify] <args>`));
+  }
+
+  return {
+    finalCode: 'GSD task completed. Check .planning/ directory or updated files.',
+    iterations: 1,
+    approved: true,
+  };
 }
 
 /**
@@ -53,6 +91,10 @@ export async function runOrchestrator(
 ): Promise<OrchestratorResult> {
   const config = getConfig();
   const taskType = resolveTaskType(userTask, explicitType);
+
+  if (taskType === 'gsd') {
+    return await runGsdFlow(userTask);
+  }
 
   if (!code.trim()) {
     throw new Error('ソースコードが空です。/read コマンドでファイルを読み込んでから実行してください。');
