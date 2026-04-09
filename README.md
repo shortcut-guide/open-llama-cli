@@ -1,5 +1,3 @@
-リポジトリ解析を完了しました。​​​​​​​​​​​​​​​​
-
 📋 まとめ
 open-llama-cli は、ローカル/カスタムLLM APIと連携する TypeScript製 CLIチャットツール + Multi-Agentオーケストレーター。MVC構造を採用済み。
 
