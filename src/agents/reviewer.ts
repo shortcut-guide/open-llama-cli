@@ -3,52 +3,39 @@ import chalk from 'chalk';
 import { callLLM, type Message } from '../model/llm.js';
 import type { AgentContext, AgentResult, ReviewResult } from './types.js';
 
-const REVIEWER_SYSTEM_PROMPT = `あなたは極めて厳格かつ親切なシニアコードレビュアーです。
+const REVIEWER_SYSTEM_PROMPT = `You are a strict and helpful senior code reviewer.
 
-【承認条件 - すべてを満たさない限り approved=false】
-1. 丸コピの絶対禁止（最重要）
-   - サブコンポーネント（画像や情報）の抽出において、元コードが丸ごとコピーされていないか？
-   - 例: 画像コンポの抽出なのに「price」や「review」などの無関係なコードが含まれていたら即FAIL。
-   - 例: 情報コンポの抽出なのに「img」タグが含まれていたら即FAIL。
-
-2. 統合タスクの正確性（メインコンポーネントの場合）
-   - サブコンポーネントを \`import\` し、JSX内で \`<SubComponent />\` のように正しく呼び出しているか？
-   - 元のインラインの長いUIが残ったままならFAIL。
-
-【出力形式（JSON厳守）】
-以下のフォーマットに従い記述してください。
-※ Coderがそのままコピー＆ペーストして使える【完全な修正コード】を \`hints\` 配列に記述してください。「...」などの省略記号は絶対に使用しないでください（ハルシネーションの原因になります）。
-
-\`\`\`json
+【APPROVAL CONDITIONS】
+1. Task Alignment: Does the code fulfill the requested task?
+2. Quality: Is the code clean, efficient, and following best practices?
+3. Completeness: NO placeholders like "// ..." are allowed. Everything must be implemented.
+4. Import Integrity: Check if all imported modules/functions exist in the context or are being created.
+【OUTPUT FORMAT (JSON ONLY)】
+Output a JSON object with the following structure:
 {
-  "approved": false,
-  "issues": [
-    "画像コンポーネントの抽出ですが、無関係な価格(price)や名前(name)、<Link>ラッパーが残っています（丸コピ状態です）。"
-  ],
-  "suggestions": [
-    "画像とフォールバックのUIだけを残し、それ以外をすべて削除してください。"
-  ],
-  "hints": [
-    ※ hints配列にコードを書く際は、必ずダブルクォートをエスケープするか、JSONとして正しくパースできる形式に徹底してください。コードブロックのバッククォートも慎重に扱ってください。
-    "import React, { useState } from 'react';\\nimport { Product } from './types';\\n\\nexport default function ProductCardImage({ product }: { product: Product }) {\\n  const [imageError, setImageError] = useState(false);\\n\\n  return (\\n    <div className=\\"w-28 h-28 shrink-0\\">\\n      {product.imageUrl && !imageError ? (\\n        <img src={product.imageUrl} alt={product.name} onError={() => setImageError(true)} className=\\"object-cover w-full h-full rounded\\" />\\n      ) : (\\n        <div className=\\"w-full h-full bg-gray-200 rounded flex items-center justify-center text-gray-500\\">📦</div>\\n      )}\\n    </div>\\n  );\\n}\\n"
-  ]
+  "approved": boolean,
+  "issues": ["list of issues"],
+  "suggestions": ["list of suggestions"],
+  "hints": ["specific code snippets or instructions for the Coder to fix the issues"]
 }
-\`\`\``;
+`.trim();
 
 export async function runReviewerAgent(ctx: AgentContext): Promise<AgentResult> {
   const codeToReview = ctx.fixedCode ?? ctx.code ?? '';
+  const taskDescription = ctx.gsdTask ? ctx.gsdTask.action : ctx.userTask;
+  
   const messages: Message[] = [
     { role: 'system', content: REVIEWER_SYSTEM_PROMPT },
     {
       role: 'user',
       content:`
-## プラン (Target Path & Extract Focus)
-${ctx.plan}
+## TASK
+${taskDescription}
 
-## 元コード (Source Material)
+## CONTEXT
 ${ctx.sourceCode ?? 'N/A'}
 
-## レビュー対象コード
+## CODE TO REVIEW
 ${codeToReview}
 `.trim(),
     },

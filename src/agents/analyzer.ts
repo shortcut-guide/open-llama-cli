@@ -20,10 +20,12 @@ export async function runAnalyzer(params: {
   code: string;
   filePath: string;
   llmUrl: string;
-}): Promise<FileAnalysis> {
+}): Promise<FileAnalysis & { analysis?: string }> {
   const { code, filePath, llmUrl } = params;
 
-  const prompt = buildAnalyzerPrompt(code, filePath);
+  const prompt = code === 'N/A' 
+    ? `Analyze the project goal for: ${filePath}. Provide a high-level technical summary.`
+    : buildAnalyzerPrompt(code, filePath);
 
   const messages: Message[] = [
     { role: "user", content: prompt },
@@ -32,16 +34,19 @@ export async function runAnalyzer(params: {
   const text: string = await callLLM(messages, {
     printStream: true,
     temperature: 0.1,
-    maxTokens: 800,
-    label: "🔍 Analyzer",
+    maxTokens: 1000,
+    label: "🔍 Researcher",
   });
+
+  if (code === 'N/A') {
+    return { path: filePath, exports: [], dependencies: [], functions: [], analysis: text };
+  }
 
   try {
     const json = extractJSON(text);
     return json;
   } catch (e) {
-    console.error("Analyzer parse error:", text);
-    throw new Error("Analyzer failed to parse JSON");
+    return { path: filePath, exports: [], dependencies: [], functions: [], analysis: text };
   }
 }
 

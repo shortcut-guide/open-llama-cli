@@ -42,5 +42,21 @@
   {
     "role": "assistant",
     "content": "お元気ですか？何かお手伝いできることはありますか？"
+  },
+  {
+    "role": "user",
+    "content": "[Multi-Agent Task] １機能１ファイルでリファクタリング"
+  },
+  {
+    "role": "assistant",
+    "content": "\n\n```file:C:\\Users\\user\\Dropbox\\PC\\Documents\\open-llama-cli\\src\\index.ts\n```"
+  },
+  {
+    "role": "user",
+    "content": "[Multi-Agent Task] １機能１ファイルでリファクタリング"
+  },
+  {
+    "role": "assistant",
+    "content": "\n\n```file:C:/Users/user/Dropbox/PC/Documents/open-llama-cli/src/index.ts\n```"
   }
 ]

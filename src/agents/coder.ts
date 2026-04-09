@@ -5,40 +5,45 @@ import { callLLM, type Message } from '../model/llm.js';
 import type { AgentContext, AgentResult, TaskType } from './types.js';
 
 const CODER_SYSTEM_PROMPT = `
-You are a Ruthless React Refactoring Engineer.
-Your mission is to extract ONLY what is requested and DELETE EVERYTHING ELSE.
+You are an expert Software Engineer.
+Your mission is to execute the requested task perfectly and concisely.
 
 # CRITICAL RULES
-1. NEVER output a full copy of the source code unless specifically asked to.
-2. NEVER duplicate type/interface definitions (like \`type Product = {...}\`) if they are meant to be in a \`types.ts\` file. Use \`import\` instead.
-3. When extracting a sub-component from a file with \`if/else\` layout branches, DO NOT copy the branches. Extract the core JSX elements and merge them into a simple, single return statement.
-4. Your output MUST start exactly with: \`\`\`file:<target_path>\`\`\`
+1. ALWAYS output the FULL content of the file. 
+2. NEVER use placeholders like "// ..." or "// existing code".
+3. If multiple files are involved, use multiple markdown code blocks.
+4. Your output for each file MUST start exactly with: \`\`\`file:<target_path>\`\`\`
 `.trim();
 
 export async function runCoderAgent(ctx: AgentContext): Promise<AgentResult> {
-  let targetPath = 'unknown.tsx';
-  let extractFocus = 'Extract logic.';
-  try {
-    const planObj = JSON.parse(ctx.plan || '{}');
-    targetPath = planObj.file || targetPath;
-    extractFocus = planObj.extractFocus || extractFocus;
-  } catch { targetPath = ctx.plan || targetPath; }
+  let targetPath = 'unknown.ts';
+  let instructions = 'Execute the task.';
 
-  console.log(chalk.bold.blue(`\n  💻 Coder Agent -> Target: ${targetPath.split('/').pop()}`));
+  if (ctx.gsdTask) {
+    targetPath = ctx.gsdTask.files.join(', ');
+    instructions = ctx.gsdTask.action;
+  } else {
+    try {
+      const planObj = JSON.parse(ctx.plan || '{}');
+      targetPath = planObj.file || targetPath;
+      instructions = planObj.extractFocus || instructions;
+    } catch { 
+      targetPath = ctx.plan || targetPath; 
+    }
+  }
+
+  console.log(chalk.bold.blue(`\n  💻 Executor Agent -> Task: ${ctx.gsdTask?.name || 'Standard Task'}`));
 
   function buildUserPrompt(): string {
     return `
-# SOURCE CONTENT
+# CONTEXT
 ${ctx.sourceCode ?? 'N/A'}
 
 # TASK INSTRUCTIONS (CRITICAL)
-Target File: ${targetPath}
-Instructions: ${extractFocus}
+Target Files: ${targetPath}
+Instructions: ${instructions}
 
--> IF EXTRACTING: Be ruthless. Output ONLY the parts mentioned in the instructions. DO NOT define types; import them.
--> IF REBUILDING MAIN WRAPPER: Completely rewrite it to import and use the new sub-components. Replace the old bloated JSX with clean component tags (e.g., \`<ImageDisplay product={product} />\`).
-
-Your output MUST be ONLY a single markdown code block starting with: \`\`\`file:${targetPath}\`\`\`
+Your output MUST be markdown code blocks starting with: \`\`\`file:<target_path>\`\`\`
 `.trim();
   }
 

@@ -26,61 +26,48 @@ export async function runPlanner(params: {
     printStream: true,
     temperature: 0.2, 
     maxTokens: 1500,
-    label: "📋 Architect Planner",
+    label: "📋 Planner",
   });
 
   try {
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    return JSON.parse(text.substring(start, end + 1));
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    throw new Error("JSON not found");
   } catch (e) {
-    throw new Error("Planner failed to parse JSON");
+    // If JSON fails, maybe it returned XML or plain text. 
+    // For now, let's keep it simple and try to return a dummy plan if it's GSD-like.
+    return {
+      plans: [{
+        file: analysis.path,
+        responsibility: "Execute task",
+        extractFocus: target
+      }]
+    };
   }
 }
 
 function buildPlannerPrompt(target: string, code: string, filePath: string): string {
-  const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
-  const fileName = filePath.split('/').pop()?.split('.')[0] || 'Component';
-
   return `
-You are an expert Frontend Architect.
-Your task is to design a granular file structure for a React component refactoring.
+You are an expert Software Architect.
+Your task is to design a plan to achieve the following goal: ${target}
 
-# ARCHITECTURE RULES (CRITICAL)
-1. **Strict Imports**: ALL sub-components and the main wrapper MUST import shared types (e.g., \`import { Product } from './types'\`). Tell the Coder NEVER to duplicate type definitions.
-2. **Sub-components**: Must be strictly atomic. Tell the Coder to ignore outer layout wrappers or \`if/else\` branches from the parent, and extract ONLY the raw JSX elements needed.
-3. **Main Wrapper**: Must import the sub-components, pass necessary props, and DELETE the old inline UI.
+Design atomic tasks. For refactoring:
+- Explicitly list which functions should be exported from which files.
+- Ensure the 'action' describes the exact interface to prevent "undefined function" errors during review.
+
+# SOURCE CODE CONTEXT
+File: ${filePath}
+${code}
 
 # OUTPUT FORMAT (STRICT JSON)
 {
   "plans": [
     {
-      "file": "${dirPath}/${fileName}/types.ts",
-      "responsibility": "Type definitions",
-      "extractFocus": "Extract ONLY types/interfaces. DELETE all React components."
-    },
-    {
-      "file": "${dirPath}/${fileName}/${fileName}Image.tsx",
-      "responsibility": "Image display",
-      "extractFocus": "Import types from './types'. DO NOT define types here. Extract ONLY the <img> and fallback JSX. Ignore layout if/else branches. DELETE price, name, and reviews."
-    },
-    {
-      "file": "${dirPath}/${fileName}/${fileName}Info.tsx",
-      "responsibility": "Text/data display",
-      "extractFocus": "Import types from './types'. DO NOT define types here. Extract ONLY name, price, and reviews. DELETE <img> and imageError state."
-    },
-    {
-      "file": "${dirPath}/${fileName}/${fileName}.tsx",
-      "responsibility": "Main wrapper component",
-      "extractFocus": "Import types and sub-components. Keep the \`layout === 'horizontal'\` logic, but REPLACE the inline image and info with <${fileName}Image /> and <${fileName}Info />."
+      "file": "path/to/file",
+      "responsibility": "What this file/task is for",
+      "extractFocus": "Detailed instructions for the Executor"
     }
   ]
 }
-
-# USER REQUEST
-${target}
-
-# SOURCE CODE
-${code}
 `.trim();
 }

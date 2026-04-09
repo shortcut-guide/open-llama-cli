@@ -92,6 +92,8 @@ export function parseAgentCommand(input: string): AgentCommand {
   return { type: null, rawInput: input };
 }
 
+import { gsdInitialize, gsdDiscussPhase, gsdPlanPhase, gsdExecutePhase, gsdVerifyWork } from '../gsd/orchestrator.js';
+
 // ─────────────────────────────────────
 // メインコマンドハンドラ
 
@@ -102,6 +104,41 @@ export async function handleCommand(
 ): Promise<boolean> {
 
   const trimmed = userInput.trim();
+
+  // ─── GSD Commands ─────────────────────
+  if (trimmed.startsWith('/gsd-new-project')) {
+    const goal = trimmed.replace('/gsd-new-project', '').trim();
+    if (!goal) {
+      console.log(chalk.yellow('Usage: /gsd-new-project <your project goal>'));
+      return true;
+    }
+    await gsdInitialize(goal);
+    return true;
+  }
+
+  if (trimmed.startsWith('/gsd-discuss-phase ')) {
+    const phase = trimmed.replace('/gsd-discuss-phase ', '').trim();
+    await gsdDiscussPhase(phase);
+    return true;
+  }
+
+  if (trimmed.startsWith('/gsd-plan-phase ')) {
+    const phase = trimmed.replace('/gsd-plan-phase ', '').trim();
+    await gsdPlanPhase(phase);
+    return true;
+  }
+
+  if (trimmed.startsWith('/gsd-execute-phase ')) {
+    const phase = trimmed.replace('/gsd-execute-phase ', '').trim();
+    await gsdExecutePhase(phase);
+    return true;
+  }
+
+  if (trimmed.startsWith('/gsd-verify-work ')) {
+    const phase = trimmed.replace('/gsd-verify-work ', '').trim();
+    await gsdVerifyWork(phase);
+    return true;
+  }
 
   // ─── /agent ─────────────────────
   if (trimmed.startsWith('/agent')) {
@@ -301,6 +338,11 @@ export async function handleCommand(
 ┌──────────────────────────────────────────────────────────────────┐
 │  コマンド一覧                                                      │
 ├────────────────────────────────┬─────────────────────────────────┤
+│  /gsd-new-project <goal>       │ GSDプロジェクト初期化             │
+│  /gsd-discuss-phase <N>        │ GSD議論フェーズ                   │
+│  /gsd-plan-phase <N>           │ GSD計画フェーズ                   │
+│  /gsd-execute-phase <N>        │ GSD実行フェーズ                   │
+│  /gsd-verify-work <N>          │ GSD検証フェーズ                   │
 │  /autowrite [on|off]           │ 自動書き込みトグル               │
 │  /agent <task>                 │ Multi-Agent モードで実行         │
 │  /search <glob>                │ globでファイル検索               │
