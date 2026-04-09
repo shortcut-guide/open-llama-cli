@@ -30,4 +30,15 @@ The goal is to deconstruct the monolithic `handleCommand` in `src/controller/com
 - Major architectural changes to the `model` or `view` layers.
 
 ## Traceability
-*(To be filled by the roadmapper)*
+- REFACTOR-01: M1.0 P1
+- REFACTOR-02: M1.0 P1
+- REFACTOR-03: M1.0 P1
+- REFACTOR-04: M1.0 P1
+- REFACTOR-05: M1.0 P1
+- REFACTOR-06: M1.0 P1
+- REFACTOR-07: M1.0 P2
+- REFACTOR-08: M1.0 P2
+- REFACTOR-09: M1.0 P2
+- REFACTOR-10: M1.0 P3
+- REFACTOR-11: M1.0 P3
+- REFACTOR-12: M1.0 P3
