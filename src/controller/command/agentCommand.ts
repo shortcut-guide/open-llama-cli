@@ -48,10 +48,12 @@ export async function handleAgentCommand(
     return true;
   }
 
+  // pendingFileContext からコードとファイルパスを抽出
   const pending = getPendingFileContext();
   let agentCode = '';
   let agentFilePath = '';
 
+  // タスクタイプが gsd 以外の場合は、タスク実行後に pendingFileContext をクリアする
   if (pending) {
     const codeMatch = pending.match(/```\n([\s\S]*?)\n```/);
     agentCode = codeMatch ? codeMatch[1] : '';
@@ -64,6 +66,7 @@ export async function handleAgentCommand(
     }
   }
 
+  // コードがない場合は、タスク説明からコードを推測するプロンプトを生成して再度 LLM に問い合わせる
   try {
     const result = await runOrchestrator(task, agentCode, agentFilePath, parsed.type);
 
