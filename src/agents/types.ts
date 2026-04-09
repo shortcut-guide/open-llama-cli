@@ -9,9 +9,12 @@ export interface GsdTask {
   verification: string;
 }
 
+export type AgentRole = 'planner' | 'coder' | 'reviewer' | 'fixer' | 'analyzer';
+
 export interface AgentContext {
   userTask: string;
   taskType?: TaskType;
+  agentRole?: AgentRole; // 追加
   plan?: string;
   gsdTask?: GsdTask;
   sourceCode?: string;
@@ -22,28 +25,6 @@ export interface AgentContext {
   fileTargets?: string[];
   priorityFixes?: string[];
   sourcePath?: string;
+  llmUrl?: string;
 }
 
-export interface ReviewResult {
-  approved: boolean;
-  issues: string[];
-  suggestions: string[];
-  hints?: string[];
-  priority_fixes?: string[];
-  fileCount?: number;
-  directoryCheck?: {
-    types?: boolean;
-    services?: boolean;
-    hooks?: boolean;
-    components?: boolean;
-  };
-  raw: string;
-}
-
-export interface AgentResult {
-  agentName: string;
-  output: string;
-  messages: Message[];
-}
-
-export type AgentRole = 'planner' | 'coder' | 'reviewer' | 'fixer';

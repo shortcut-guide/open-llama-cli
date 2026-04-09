@@ -27,6 +27,8 @@ export async function initializeConfig(): Promise<void> {
 
 export interface Config {
   LLM_API_URL: string;
+  LLM_BONSAI_URL: string;
+  LLM_GEMMA_URL: string;
   TEMPERATURE: number;
   MAX_TOKENS: number;
   WORKSPACE_ROOT: string;
@@ -37,7 +39,9 @@ export interface Config {
 
 export function getConfig(): Config {
   return {
-    LLM_API_URL: process.env.LLM_API_URL || 'http://127.0.0.1:11434/v1/chat/completions',
+    LLM_API_URL: process.env.LLM_API_URL || 'https://phis.jp/v1/chat/completions',
+    LLM_BONSAI_URL: process.env.LLM_BONSAI_URL || 'https://phis.jp/v1/chat/completions',
+    LLM_GEMMA_URL: process.env.LLM_GEMMA_URL || 'https://gemma.phis.jp/v1/chat/completions',
     TEMPERATURE: parseFloat(process.env.TEMPERATURE || '0.7'),
     MAX_TOKENS: parseInt(process.env.MAX_TOKENS || '4096', 10),
     WORKSPACE_ROOT: process.env.WORKSPACE_ROOT || process.cwd(),

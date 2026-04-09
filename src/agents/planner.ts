@@ -27,6 +27,7 @@ export async function runPlanner(params: {
     temperature: 0.2, 
     maxTokens: 1500,
     label: "📋 Planner",
+    llmUrl: params.llmUrl,
   });
 
   try {

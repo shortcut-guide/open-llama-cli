@@ -20,7 +20,7 @@ export async function gsdInitialize(userGoal: string): Promise<void> {
   const analysis = await runAnalyzer({
     code: 'N/A', // Initialize may not have code yet
     filePath: 'PROJECT_ROOT',
-    llmUrl: config.LLM_API_URL,
+    llmUrl: config.LLM_GEMMA_URL,
   });
 
   // Step 2: Create Specs
@@ -37,7 +37,10 @@ Output format:
 [Content]
 `.trim();
 
-  const response = await callLLM([{ role: 'user', content: prompt }], { label: 'GSD Architect' });
+  const response = await callLLM([{ role: 'user', content: prompt }], { 
+    label: 'GSD Architect',
+    llmUrl: config.LLM_GEMMA_URL,
+  });
 
   const projectMatch = response.match(/---PROJECT\.md---([\s\S]*?)---/);
   const requirementsMatch = response.match(/---REQUIREMENTS\.md---([\s\S]*?)---/);
@@ -76,7 +79,10 @@ Output each task using the XML format:
 </task>
 `.trim();
 
-  const response = await callLLM([{ role: 'user', content: prompt }], { label: 'GSD Planner' });
+  const response = await callLLM([{ role: 'user', content: prompt }], { 
+    label: 'GSD Planner',
+    llmUrl: config.LLM_GEMMA_URL,
+  });
   await savePhaseArtifact(phaseNumber, 'PLAN', response);
   console.log(chalk.green(`✅ Phase ${phaseNumber} plan saved.`));
 }
@@ -118,7 +124,10 @@ Discuss implementation details, UI/UX preferences, and technical CLI constraints
 Output a summary of decisions as a CONTEXT document.
 `.trim();
 
-  const response = await callLLM([{ role: 'user', content: prompt }], { label: 'GSD Researcher' });
+  const response = await callLLM([{ role: 'user', content: prompt }], { 
+    label: 'GSD Researcher',
+    llmUrl: config.LLM_GEMMA_URL,
+  });
   await savePhaseArtifact(phaseNumber, 'CONTEXT', response);
   console.log(chalk.green(`✅ Phase ${phaseNumber} context saved.`));
 }
@@ -156,6 +165,7 @@ export async function gsdExecutePhase(phaseNumber: string): Promise<void> {
         reviewResult: currentReviewResult,
         iterationCount: i,
         taskType: 'gsd',
+        llmUrl: config.LLM_GEMMA_URL,
       });
       
       codeOutput = coderResult.output;
@@ -167,6 +177,7 @@ export async function gsdExecutePhase(phaseNumber: string): Promise<void> {
         code: codeOutput,
         iterationCount: i,
         taskType: 'gsd',
+        llmUrl: config.LLM_BONSAI_URL,
       });
 
       currentReviewResult = parseReviewResult(reviewerResult.output);

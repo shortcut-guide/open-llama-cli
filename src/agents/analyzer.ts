@@ -36,6 +36,7 @@ export async function runAnalyzer(params: {
     temperature: 0.1,
     maxTokens: 1000,
     label: "🔍 Researcher",
+    llmUrl: llmUrl,
   });
 
   if (code === 'N/A') {

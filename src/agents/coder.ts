@@ -66,6 +66,7 @@ Your output MUST be markdown code blocks starting with: \`\`\`file:<target_path>
     label: '💻 Coder',
     systemPrompt: CODER_SYSTEM_PROMPT,
     temperature: 0.1, 
+    llmUrl: ctx.llmUrl,
   });
 
   return {

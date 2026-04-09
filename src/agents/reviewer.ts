@@ -41,7 +41,10 @@ ${codeToReview}
     },
   ];
 
-  const raw = await callLLM(messages, { printStream: false });
+  const raw = await callLLM(messages, { 
+    printStream: false,
+    llmUrl: ctx.llmUrl,
+  });
 
   let reviewResult: ReviewResult;
   try {

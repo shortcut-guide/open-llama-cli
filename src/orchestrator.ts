@@ -9,12 +9,30 @@ import { runCoderAgent } from './agents/coder.js';
 import { runReviewerAgent, parseReviewResult } from './agents/reviewer.js';
 import { gsdInitialize, gsdDiscussPhase, gsdPlanPhase, gsdExecutePhase, gsdVerifyWork } from './gsd/orchestrator.js';
 
-import type { AgentContext, TaskType, ReviewResult } from './agents/types.js';
+import type { AgentContext, TaskType, ReviewResult, AgentRole } from './agents/types.js';
 
 export interface OrchestratorResult {
   finalCode: string;
   iterations: number;
   approved: boolean;
+}
+
+/**
+ * エージェントの役割に基づいてLLM URLを解決する
+ */
+function resolveModelUrl(role: AgentRole): string {
+  const config = getConfig();
+  switch (role) {
+    case 'analyzer':
+    case 'planner':
+    case 'coder':
+      return config.LLM_GEMMA_URL;
+    case 'reviewer':
+    case 'fixer':
+      return config.LLM_BONSAI_URL;
+    default:
+      return config.LLM_API_URL;
+  }
 }
 
 /**
@@ -110,7 +128,7 @@ export async function runOrchestrator(
   const analysis = await runAnalyzer({
     code,
     filePath,
-    llmUrl: config.LLM_API_URL,
+    llmUrl: resolveModelUrl('analyzer'),
   });
 
   /**
@@ -121,7 +139,7 @@ export async function runOrchestrator(
     target: userTask,
     code: code,
     analysis: analysis,
-    llmUrl: config.LLM_API_URL,
+    llmUrl: resolveModelUrl('planner'),
   });
 
   let finalCode = '';
@@ -137,10 +155,12 @@ export async function runOrchestrator(
     let ctx: AgentContext = {
       userTask,
       taskType,
+      agentRole: 'coder',
       iterationCount: 0,
       plan: JSON.stringify(plan),
       sourceCode: code,
       sourcePath: analysis.path,
+      llmUrl: resolveModelUrl('coder'),
     };
 
     let coderResult = await runCoderAgent(ctx);
@@ -167,8 +187,10 @@ export async function runOrchestrator(
 
       const reviewerResult = await runReviewerAgent({
         ...ctx,
+        agentRole: 'reviewer',
         code: codeOutput,
         reviewResult: currentReviewResult,
+        llmUrl: resolveModelUrl('reviewer'),
       });
 
       // レビューJSONの解析
@@ -177,13 +199,12 @@ export async function runOrchestrator(
         review = parseReviewResult(reviewerResult.output);
       } catch (e) {
         console.log(chalk.red('  ⚠️ レビューJSONの解析に失敗しました。パニック防止のためリトライします。'));
-        // 🔥 修正箇所: raw プロパティを追加
         review = { 
           approved: false, 
           issues: ['Reviewer JSON parse error'], 
           hints: [], 
           suggestions: [],
-          raw: reviewerResult.output // 元の出力を保持
+          raw: reviewerResult.output
         };
       }
 

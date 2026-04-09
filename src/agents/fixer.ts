@@ -71,7 +71,11 @@ export async function runFixerAgent(ctx: AgentContext): Promise<AgentResult> {
     },
   ];
 
-  const output = await callLLM(messages, { printStream: true, label: '🔧 Fixer' });
+  const output = await callLLM(messages, { 
+    printStream: true, 
+    label: '🔧 Fixer',
+    llmUrl: ctx.llmUrl,
+  });
 
   return {
     agentName: 'Fixer',

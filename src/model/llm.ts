@@ -16,6 +16,7 @@ export async function callLLM(
     temperature?: number;
     maxTokens?: number;
     systemPrompt?: string;
+    llmUrl?: string;
   } = {}
 ): Promise<string> {
   const { printStream = true, label = 'AI' } = options;
@@ -25,11 +26,12 @@ export async function callLLM(
     ? [{ role: 'system', content: options.systemPrompt }, ...history]
     : history;
 
-  const response = await fetch(config.LLM_API_URL, {
+  const url = options.llmUrl || config.LLM_API_URL;
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      messages: history,
+      messages: messages,
       temperature: options.temperature ?? config.TEMPERATURE,
       max_tokens: options.maxTokens ?? config.MAX_TOKENS,
       stream: true,
