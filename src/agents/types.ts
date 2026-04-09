@@ -11,6 +11,20 @@ export interface GsdTask {
 
 export type AgentRole = 'planner' | 'coder' | 'reviewer' | 'fixer' | 'analyzer';
 
+export interface ReviewResult {
+  approved: boolean;
+  issues?: string[];
+  suggestions: string[];
+  hints: string[];
+  raw?: string;
+}
+
+export interface AgentResult {
+  agentName: string;
+  output: string;
+  messages: Message[];
+}
+
 export interface AgentContext {
   userTask: string;
   taskType?: TaskType;

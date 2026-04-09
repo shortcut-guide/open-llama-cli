@@ -52,7 +52,7 @@ Your output MUST be markdown code blocks starting with: \`\`\`file:<target_path>
   if (ctx.reviewResult && !ctx.reviewResult.approved) {
     messages.push({ role: 'assistant', content: ctx.code ?? '' });
     
-    let refixContent = `# REFIX REQUIRED\n[Issues]:\n${ctx.reviewResult.issues.join('\n')}`;
+    let refixContent = `# REFIX REQUIRED\n[Issues]:\n${(ctx.reviewResult.issues ?? []).join('\n')}`;
     if (ctx.reviewResult.hints && ctx.reviewResult.hints.length > 0) {
       refixContent += `\n\n# REVIEWER HINTS (USE THESE):\n${ctx.reviewResult.hints.join('\n')}`;
     }

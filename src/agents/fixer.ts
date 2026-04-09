@@ -55,7 +55,7 @@ export async function runFixerAgent(ctx: AgentContext): Promise<AgentResult> {
   }
 
   const issueList = ctx.priorityFixes?.map((i) => `- ${i}`).join('\n') ?? 'なし';
-  const suggList = ctx.reviewResult.suggestions.map((s) => `- ${s}`).join('\n');
+  const suggList = ctx.reviewResult.suggestions.map((s: string) => `- ${s}`).join('\n');
   const codeToFix = ctx.fixedCode ?? ctx.code ?? '';
 
   const messages: Message[] = [

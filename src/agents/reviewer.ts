@@ -60,12 +60,12 @@ ${codeToReview}
     console.log(chalk.green('\n  ✅ レビュー結果: 承認'));
   } else {
     console.log(chalk.red(`\n  ❌ レビュー結果: 要修正 (イテレーション ${ctx.iterationCount})`));
-    reviewResult.issues?.forEach((i) => console.log(chalk.red(`    - ${i}`)));
+    reviewResult.issues?.forEach((i: string) => console.log(chalk.red(`    - ${i}`)));
     
     // 🔥 ヒントの全文をターミナルに表示するように修正
     if (reviewResult.hints && reviewResult.hints.length > 0) {
       console.log(chalk.cyan('    💡 ヒント (Code Snippets):'));
-      reviewResult.hints.forEach((h) => {
+      reviewResult.hints.forEach((h: string) => {
         console.log(chalk.cyan('      ' + h.trim().split('\n').join('\n      ')));
       });
     }
