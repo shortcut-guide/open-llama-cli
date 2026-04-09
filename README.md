@@ -1,75 +1,145 @@
+リポジトリ解析を完了しました。​​​​​​​​​​​​​​​​
 
+📋 まとめ
+open-llama-cli は、ローカル/カスタムLLM APIと連携する TypeScript製 CLIチャットツール + Multi-Agentオーケストレーター。MVC構造を採用済み。
 
-| 機能 | 実装内容 |
-|---|---|
-| ファイル検索 | glob/正規表現でファイル・内容を検索 |
-| ファイル変更 | 行指定・正規表現での部分編集・全体上書き |
-| ファイル削除 | 確認プロンプト付き安全削除 |
-| チャット→ファイル反映 | ` ```file:path ` ブロックを自動検知・保存 |
+アーキテクチャ全体図
 
-------
-
-## アーキテクチャ
-
-```mermaid
 flowchart TD
-    A[main loop] --> B{入力}
-    B -->|/コマンド| C[handleCommand]
-    B -->|テキスト| D[callLLM]
+    subgraph Entry["src/index.ts (エントリーポイント)"]
+        MAIN[main loop]
+    end
 
-    C --> C1["/search glob [--content re]"]
-    C --> C2["/read path"]
-    C --> C3["/write path"]
-    C --> C4["/replace path s => r"]
-    C --> C5["/delete path（確認付き）"]
+    subgraph View["src/view/"]
+        DISP[display.ts\nバナー/ステータス表示]
+    end
 
-    D --> E[LLM API]
-    E --> F[handleFileEditProposals]
-    F -->|```file:path ブロック検知| G{ユーザー確認\ny/N/番号}
-    G -->|y| H[writeFile 全件保存]
-    G -->|番号| I[writeFile 選択保存]
-    G -->|N| J[スキップ]
-```
+    subgraph Controller["src/controller/"]
+        CMD[command.ts\nコマンドルーター]
+        STATE[state.ts\nAUTO_WRITE / pendingContext]
+        subgraph Commands["command/"]
+            AGENT_CMD[agentCommand.ts]
+            FILE_CMD[fileCommands.ts]
+            SYS_CMD[systemCommands.ts]
+        end
+        FP[fileProposal.ts\nAI返答→ファイル反映]
+    end
 
----
+    subgraph Model["src/model/"]
+        LLM[llm.ts\ncallLLM / Message型]
+        HIST[history.ts\nchat_history.json]
+        FILE[file.ts\nFS操作 / resolveSafe]
+    end
 
-## コマンド一覧
+    subgraph Orchestrator["src/orchestrator.ts"]
+        ORCH[runOrchestrator\nMacro Pipeline]
+    end
 
-| コマンド | 説明 | 例 |
-|---|---|---|
-| `/search <glob>` | globでファイル検索 | `/search src/**/*.ts` |
-| `/search <glob> --content <re>` | ファイル内容を正規表現検索 | `/search **/*.ts --content TODO` |
-| `/read <path>` | 行番号付きで表示 | `/read src/index.ts` |
-| `/write <path>` | 対話入力でファイル書き込み（`EOF`で終了） | `/write src/new.ts` |
-| `/replace <path> <s> => <r>` | 文字列置換 | `/replace index.ts foo => bar` |
-| `/delete <path>` | 確認付き削除 | `/delete old.ts` |
-| `/history` | 履歴クリア | `/history` |
+    subgraph Agents["src/agents/"]
+        ANA[analyzer.ts\nコード静的解析]
+        PLAN[planner.ts\nアーキ設計図]
+        CODER[coder.ts\nコード生成]
+        REV[reviewer.ts\nレビュー/承認]
+        FIX[fixer.ts]
+        TYPES[types.ts\n共有型定義]
+    end
 
-| 項目 | 変更内容 |
-|---|---|
-| `AUTO_WRITE` フラグ | `let` で宣言、`.env` の `AUTO_WRITE=true` で起動時ON |
-| `extractFileBlocks()` | ブロック抽出を独立関数に分離（Model層） |
-| `handleFileEditProposals()` | `AUTO_WRITE=true` 時は確認なしで全件即時保存 |
-| `/autowrite [on\|off]` | 実行中にトグル可能なコマンド追加 |
-| `resolveSafe()` | パス検証を共通化（セキュリティ強化） |
+    subgraph Config["src/config.ts"]
+        CFG[getConfig\nLLM_API_URL, AUTO_WRITE...]
+    end
 
-## 動作フロー
+    MAIN --> CMD
+    MAIN --> LLM
+    MAIN --> FP
+    MAIN --> DISP
+    CMD --> AGENT_CMD
+    CMD --> FILE_CMD
+    CMD --> SYS_CMD
+    CMD --> STATE
+    AGENT_CMD --> ORCH
+    ORCH --> ANA
+    ORCH --> PLAN
+    ORCH --> CODER
+    ORCH --> REV
+    ORCH --> FIX
+    ANA & PLAN & CODER & REV --> LLM
+    FILE_CMD --> FILE
+    FP --> FILE
+    MAIN --> HIST
+    CFG --> LLM
+    CFG --> ORCH
 
-```mermaid
-flowchart TD
-    A[AI返答受信] --> B[extractFileBlocks]
-    B --> C{ブロックあり?}
-    C -->|なし| D[終了]
-    C -->|あり| E{AUTO_WRITE?}
-    E -->|true| F[全件即時writeFile]
-    E -->|false| G[確認プロンプト\ny / N / 番号]
-    G -->|y| F
-    G -->|番号| H[指定1件のみwriteFile]
-    G -->|N| I[スキップ]
-```
 
-## 設定方法
+ファイル構成サマリー
 
-```bash
-# .env で常時ON
-AUTO_WRITE=true
+
+
+|パス                                        |役割                                     |レイヤー        |
+|------------------------------------------|---------------------------------------|------------|
+|`src/index.ts`                            |エントリー・メインループ                           |-           |
+|`src/config.ts`                           |環境変数読込・Config型                         |Config      |
+|`src/model/llm.ts`                        |LLM API呼び出し（SSEストリーミング）                |Model       |
+|`src/model/history.ts`                    |チャット履歴のJSON永続化                         |Model       |
+|`src/model/file.ts`                       |FS操作・パス検証（resolveSafe）                 |Model       |
+|`src/view/display.ts`                     |CLI表示（chalk）                           |View        |
+|`src/controller/state.ts`                 |アプリ状態（AUTO_WRITE等）                     |Controller  |
+|`src/controller/command.ts`               |コマンドルーター                               |Controller  |
+|`src/controller/command/agentCommand.ts`  |`/agent` コマンド処理                        |Controller  |
+|`src/controller/command/fileCommands.ts`  |`/search /read /write /replace /delete`|Controller  |
+|`src/controller/command/systemCommands.ts`|`/help /clear /exit /autowrite`        |Controller  |
+|`src/controller/fileProposal.ts`          |AI返答の ` ```file:` ブロック検知・保存            |Controller  |
+|`src/orchestrator.ts`                     |Multi-Agentパイプライン制御                    |Orchestrator|
+|`src/agents/analyzer.ts`                  |コード静的解析Agent                           |Agent       |
+|`src/agents/planner.ts`                   |アーキテクチャ設計Agent                         |Agent       |
+|`src/agents/coder.ts`                     |コード生成Agent                             |Agent       |
+|`src/agents/reviewer.ts`                  |コードレビューAgent（承認/差し戻し）                  |Agent       |
+|`src/agents/fixer.ts`                     |修正Agent                                |Agent       |
+|`src/agents/types.ts`                     |共有型定義（TaskType, AgentContext等）         |Shared      |
+
+Multi-Agentパイプライン
+
+sequenceDiagram
+    participant U as User
+    participant O as Orchestrator
+    participant AN as Analyzer
+    participant PL as Planner
+    participant CO as Coder
+    participant RE as Reviewer
+
+    U->>O: /agent <task>
+    O->>AN: runAnalyzer(code, filePath)
+    AN-->>O: FileAnalysis (exports/deps/functions)
+    O->>PL: runPlanner(task, code, analysis)
+    PL-->>O: MacroPlan [MicroPlan...]
+
+    loop ファイルごと
+        O->>CO: runCoderAgent(plan)
+        CO-->>O: generated code
+        loop MAX_REVIEW_ITERATIONS
+            O->>RE: runReviewerAgent(code)
+            RE-->>O: ReviewResult {approved, issues, hints}
+            alt approved
+                O-->>O: ✅ break
+            else rejected
+                O->>CO: retry with hints
+            end
+        end
+    end
+    O-->>U: finalCode + summary
+
+
+主要技術スタック
+
+
+
+|項目         |詳細                              |
+|-----------|--------------------------------|
+|言語         |TypeScript 5.x / ESM            |
+|ランタイム      |Node.js                         |
+|LLM通信      |SSEストリーミング（fetch API）           |
+|LLM エンドポイント|`phis.jp`（カスタム）/ `gemma.phis.jp`|
+|CLI描画      |chalk 5.x                       |
+|ファイル検索     |glob 10.x                       |
+|履歴永続化      |`chat_history.json`（CWD）        |
+|ビルド        |`tsc` → `dist/`                 |
+|MVC準拠度     |✅ 高（model/view/controller 分離済み） |
