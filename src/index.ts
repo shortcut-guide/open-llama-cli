@@ -23,6 +23,7 @@ import {
   printAutoWriteStatus,
   printWorkspaceInfo,
   printHint,
+  printGsdStatusIfActive,
 } from './view/display.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -59,6 +60,7 @@ async function main(): Promise<void> {
   printBanner();
   printWorkspaceInfo(config.WORKSPACE_ROOT);
   printAutoWriteStatus(getAutoWrite());
+  await printGsdStatusIfActive();
   printHint();
 
   const history: Message[] = await loadHistory(fullSystemPrompt);

@@ -1,4 +1,4 @@
-// src/controller/systemCommands.ts
+// src/controller/command/systemCommands.ts
 import chalk from 'chalk';
 
 import { clearHistory } from '../../model/history.js';
@@ -34,7 +34,17 @@ export function handleHelpCommand(): boolean {
 ┌──────────────────────────────────────────────────────────────────┐
 │  コマンド一覧                                                      │
 ├────────────────────────────────┬─────────────────────────────────┤
-│  /agent gsd <subcmd> <args>    │ GSDモード (init|discuss|plan|...) │
+│  GSD ワークフロー                                                  │
+│  /gsd:help                     │ GSDコマンド一覧を表示            │
+│  /gsd:status                   │ ワークフロー状態を表示           │
+│  /gsd:new-project              │ プロジェクト新規初期化           │
+│  /gsd:new-milestone <name>     │ 新マイルストーン開始             │
+│  /gsd:plan-phase <N>           │ フェーズ N の計画生成            │
+│  /gsd:execute-phase <N>        │ フェーズ N を実行                │
+│  /gsd:verify-work <N>          │ フェーズ N の成果物を検証        │
+│  /gsd:next [--force]           │ 次のステップへ自動進行           │
+├────────────────────────────────┼─────────────────────────────────┤
+│  Multi-Agent / ファイル操作                                        │
 │  /agent <task>                 │ Multi-Agent モードで実行         │
 │  /autowrite [on|off]           │ 自動書き込みトグル               │
 │  /search <glob>                │ globでファイル検索               │
