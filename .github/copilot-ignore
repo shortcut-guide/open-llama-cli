@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+*.log
+.history/
+.gitignore
+.package-lock.json
+.gemini
