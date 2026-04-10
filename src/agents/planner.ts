@@ -19,7 +19,7 @@ export async function runPlanner(params: {
   llmUrl: string;
 }): Promise<MacroPlan> {
   const { target, code, analysis } = params;
-  const prompt = buildPlannerPrompt(target, code, analysis.path);
+  const prompt = buildPlannerPrompt(target, code, analysis);
   const messages: Message[] = [{ role: "user", content: prompt }];
 
   const text: string = await callLLM(messages, {
@@ -47,18 +47,28 @@ export async function runPlanner(params: {
   }
 }
 
-function buildPlannerPrompt(target: string, code: string, filePath: string): string {
+function buildPlannerPrompt(target: string, code: string, analysis: FileAnalysis): string {
+  const functionsJson = JSON.stringify(analysis.functions ?? [], null, 2);
   return `
 You are an expert Software Architect.
 Your task is to design a plan to achieve the following goal: ${target}
 
-Design atomic tasks. For refactoring:
-- Explicitly list which functions should be exported from which files.
-- Ensure the 'action' describes the exact interface to prevent "undefined function" errors during review.
+## Refactoring Rules (CRITICAL)
+- "1機能1ファイル" means: EACH function, class, or component must go into its OWN separate file.
+- Do NOT group multiple functions in a single file.
+- Create EXACTLY one plan entry per output file.
+- Use the "functions" list below to identify what to split.
+
+## General Rules
+- Design atomic tasks. Explicitly list which function is exported from which file.
+- Ensure the 'extractFocus' describes the exact interface to prevent "undefined function" errors.
 
 # SOURCE CODE CONTEXT
-File: ${filePath}
+File: ${analysis.path}
 ${code}
+
+# IDENTIFIED FUNCTIONS (split each into its own file)
+${functionsJson}
 
 # OUTPUT FORMAT (STRICT JSON)
 {

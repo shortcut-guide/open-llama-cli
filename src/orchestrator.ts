@@ -9,6 +9,7 @@ import { runCoderAgent } from './agents/coder.js';
 import { runReviewerAgent, parseReviewResult } from './agents/reviewer.js';
 
 import type { AgentContext, TaskType, ReviewResult, AgentRole } from './agents/types.js';
+import { extractFileBlocks } from './controller/fileProposal/extractFileBlocks.js';
 
 export interface OrchestratorResult {
   finalCode: string;
@@ -51,13 +52,14 @@ function resolveTaskType(userTask: string, explicit: TaskType | null): TaskType 
  * AIが生成したコードが実体のない「ゴミ」かどうかを判定
  */
 function isGarbageCode(code: string): boolean {
-  if (!code) return true;
-  return (
-    code.length < 50 ||
-    code.includes('Sample Code') ||
-    code.includes('TODO: Implement') ||
-    !code.includes('file:')
-  );
+  if (!code || code.length < 50) return true;
+  if (code.includes('Sample Code') || code.includes('TODO: Implement')) return true;
+
+  // ファイルブロックを解析して実コンテンツが存在するか確認
+  const blocks = extractFileBlocks(code);
+  if (blocks.length === 0) return true;
+  const hasRealContent = blocks.some(b => b.content.trim().length > 30);
+  return !hasRealContent;
 }
 
 /**

@@ -12,7 +12,9 @@ Your mission is to execute the requested task perfectly and concisely.
 1. ALWAYS output the FULL content of the file. 
 2. NEVER use placeholders like "// ..." or "// existing code".
 3. If multiple files are involved, use multiple markdown code blocks.
-4. Your output for each file MUST start exactly with: \`\`\`file:<target_path>\`\`\`
+4. Your output for each file MUST start exactly with: \`\`\`file:<target_path>
+5. NEVER output an empty code fence. The file content MUST follow the opening marker on the next line.
+6. A code block with no content (just the file marker and closing \`\`\`) is STRICTLY FORBIDDEN.
 `.trim();
 
 export async function runCoderAgent(ctx: AgentContext): Promise<AgentResult> {
