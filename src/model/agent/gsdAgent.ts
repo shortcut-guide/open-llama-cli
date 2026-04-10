@@ -6,6 +6,7 @@ import { callLLM, type Message } from '../llm.js';
 import {
   type GsdContext,
   getPreflightRequirements,
+  listPlanningFiles,
   planningFileExists,
   writePlanningFile,
 } from '../gsd.js';
@@ -54,6 +55,34 @@ async function runAbortGate(commandName: string, force: boolean): Promise<void> 
 // ─── Gate: Pre-flight ─────────────────────────────────────────────────────
 
 /**
+ * phases/ 配下のフェーズ番号に対応するディレクトリ内に
+ * 指定サフィックスのファイルが存在するか確認する。
+ *
+ * plan-phase は `phases/${padded}-${slug}/${padded}-*-PLAN.md` のような
+ * 形式でファイルを作成するため、固定パスではなく glob 的に検索する。
+ */
+async function phaseFileExists(
+  planningRoot: string,
+  phaseNum: number,
+  suffix: string
+): Promise<boolean> {
+  const allFiles = await listPlanningFiles(planningRoot, 'phases');
+  const paddedNum = String(phaseNum).padStart(2, '0');
+  return allFiles.some((f) => {
+    // phases/<XX>-slug/...-SUFFIX.md または phases/<X>-slug/...-SUFFIX.md
+    const parts = f.replace(/^phases\//, '').split('/');
+    if (parts.length < 2) return false;
+    const dir = parts[0];
+    const file = parts[parts.length - 1];
+    const dirNum = dir.match(/^(\d+)/)?.[1];
+    return (
+      (dirNum === String(phaseNum) || dirNum === paddedNum) &&
+      file.endsWith(`-${suffix}`)
+    );
+  });
+}
+
+/**
  * Pre-flight Gate: コマンドの前提ファイルが存在するか確認。
  * 不足があれば GsdPreflightError を投げる。
  */
@@ -68,9 +97,8 @@ async function runPreflightGate(
   if (commandName === 'execute-phase') {
     const phaseNum = extractPhaseNumber(args);
     if (phaseNum !== null) {
-      const planPath = `phases/${phaseNum}/PLAN.md`;
-      const exists = await planningFileExists(planningRoot, planPath);
-      if (!exists) {
+      const hasPlan = await phaseFileExists(planningRoot, phaseNum, 'PLAN.md');
+      if (!hasPlan) {
         throw new GsdPreflightError(
           `Phase ${phaseNum} の PLAN.md が存在しません。`,
           `/gsd:plan-phase ${phaseNum}`
@@ -83,9 +111,8 @@ async function runPreflightGate(
   if (commandName === 'verify-work') {
     const phaseNum = extractPhaseNumber(args);
     if (phaseNum !== null) {
-      const summaryPath = `phases/${phaseNum}/SUMMARY.md`;
-      const exists = await planningFileExists(planningRoot, summaryPath);
-      if (!exists) {
+      const hasSummary = await phaseFileExists(planningRoot, phaseNum, 'SUMMARY.md');
+      if (!hasSummary) {
         throw new GsdPreflightError(
           `Phase ${phaseNum} の SUMMARY.md が存在しません。execute-phase を先に実行してください。`,
           `/gsd:execute-phase ${phaseNum}`
