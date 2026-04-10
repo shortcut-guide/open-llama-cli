@@ -1,8 +1,9 @@
 // src/model/gsd.ts
 import * as fs from 'node:fs/promises';
+import { type Dirent } from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import TOML from '@iarna/toml';
 
 // ─── 型定義 ────────────────────────────────────────────────────────────────
@@ -36,12 +37,16 @@ function resolveGsdRoot(): string {
 /**
  * コマンド定義 TOML のパスを返す。
  * 探索順:
- *   1. get-shit-done/commands/gsd/<name>.toml
- *   2. .gemini/commands/gsd/<name>.toml  (Gemini CLI 互換)
+ *   1. get-shit-done/commands/gsd/<name>.toml  (GSD ネイティブ)
+ *   2. <cwd>/.planning/commands/gsd/<name>.toml (プロジェクトローカル上書き)
+ *   3. .gemini/commands/gsd/<name>.toml  (後方互換: Gemini CLI 共有インストール)
+ *
+ * NOTE: .gemini/ は Gemini CLI 専用スペース。GSD コマンドは get-shit-done/ に配置すること。
  */
 async function findTomlPath(name: string, gsdRoot: string): Promise<string> {
   const candidates = [
     path.join(gsdRoot, 'commands', 'gsd', `${name}.toml`),
+    path.join(process.cwd(), '.planning', 'commands', 'gsd', `${name}.toml`),
     path.join(process.cwd(), '.gemini', 'commands', 'gsd', `${name}.toml`),
   ];
 
@@ -95,6 +100,7 @@ export async function listGsdCommands(): Promise<{ name: string; description: st
 
   const searchDirs = [
     path.join(resolveGsdRoot(), 'commands', 'gsd'),
+    path.join(process.cwd(), '.planning', 'commands', 'gsd'),
     path.join(process.cwd(), '.gemini', 'commands', 'gsd'),
   ];
 
@@ -213,20 +219,54 @@ export async function resolveGsdContext(
 ): Promise<GsdContext> {
   const gsdRoot     = resolveGsdRoot();
   const planningRoot = path.join(process.cwd(), '.planning');
+  const gsdToolsBin  = path.join(gsdRoot, 'bin', 'gsd-tools.cjs');
+  const phaseNum     = extractPhaseNumberFromArgs(args);
 
   // 1. $ARGUMENTS 置換
-  const withArgs = cmd.prompt.replace(/\$ARGUMENTS/g, args.trim());
+  let withArgs = cmd.prompt.replace(/\$ARGUMENTS/g, args.trim());
 
-  // 2. .planning/ の現在状態を末尾に付与
-  const planningSnapshot = await buildPlanningSnapshot(planningRoot);
+  // 2. TOML に埋め込まれた古い .gemini/get-shit-done/ パスを実際の gsdRoot に修正
+  //    (bash コマンド文字列中の絶対パスが LLM に見えるため、正しいパスを示す)
+  withArgs = withArgs.replace(
+    /['"](\/[^'"]*\/\.gemini\/get-shit-done\/bin\/gsd-tools\.cjs)['"]/g,
+    `"${gsdToolsBin}"`
+  );
 
-  // 3. @path インライン展開
+  // 3. .planning/ の現在状態を末尾に付与（フェーズ固有ファイルも含む）
+  const planningSnapshot = await buildPlanningSnapshot(planningRoot, phaseNum);
+
+  // 4. gsd-tools.cjs init を事前実行してフェーズ情報を注入
+  //    (プロンプト内のシェルコマンドを LLM が実行できないため、結果を直接提供)
+  const initData = await preExecuteGsdToolsInit(gsdToolsBin, cmd.name, phaseNum);
+
+  // 5. @path インライン展開
   const { expanded, files } = await resolveAtPaths(withArgs, gsdRoot);
 
-  // 4. planningSnapshot を追記
-  const resolvedPrompt = planningSnapshot
-    ? `${expanded}\n\n<current_planning_state>\n${planningSnapshot}\n</current_planning_state>`
-    : expanded;
+  // 6. 各コンテキストブロックを結合
+  let resolvedPrompt = expanded;
+
+  if (planningSnapshot) {
+    resolvedPrompt += `\n\n<current_planning_state>\n${planningSnapshot}\n</current_planning_state>`;
+  }
+
+  if (initData) {
+    resolvedPrompt += `\n\n<gsd_init_data>\nこれは gsd-tools.cjs init の実行結果です。上記プロンプト内のシェルコマンドで取得するはずだったデータです。\n${initData}\n</gsd_init_data>`;
+  }
+
+  // 7. ファイル出力フォーマットの明示（ファイルを書くコマンド用）
+  if (isFileWritingCommand(cmd.name)) {
+    resolvedPrompt +=
+      '\n\n<file_output_instruction>\n' +
+      'このツールではシェルコマンドを実行できません。' +
+      'CONTEXT.md / PLAN.md / SUMMARY.md などを作成・更新する場合は、' +
+      '必ず以下の形式でファイル内容を出力してください。この形式以外ではディスクに書き込まれません。\n\n' +
+      '```file:.planning/phases/{phase_dir}/{filename}\n' +
+      '...ファイルの完全な内容...\n' +
+      '```\n\n' +
+      '例: .planning/phases/03-frontend-chat-ui/03-CONTEXT.md\n' +
+      'bashスクリプトや mkdir / cat コマンドは使わないでください。\n' +
+      '</file_output_instruction>';
+  }
 
   return {
     command: cmd,
@@ -239,9 +279,9 @@ export async function resolveGsdContext(
 
 /**
  * .planning/ 配下の主要ファイルの内容をスナップショットとして返す。
- * 存在しないファイルはスキップ。
+ * 存在しないファイルはスキップ。phaseNum が指定されている場合はフェーズ固有ファイルも含む。
  */
-async function buildPlanningSnapshot(planningRoot: string): Promise<string> {
+async function buildPlanningSnapshot(planningRoot: string, phaseNum?: number | null): Promise<string> {
   const targets = [
     'PROJECT.md',
     'REQUIREMENTS.md',
@@ -261,7 +301,138 @@ async function buildPlanningSnapshot(planningRoot: string): Promise<string> {
     }
   }
 
+  // フェーズ番号が指定されている場合、フェーズ固有ファイルを追加
+  if (phaseNum !== null && phaseNum !== undefined) {
+    const phaseFiles = await loadPhaseFiles(planningRoot, phaseNum);
+    parts.push(...phaseFiles);
+  }
+
   return parts.join('\n\n---\n\n');
+}
+
+/**
+ * 指定フェーズのディレクトリを探し、CONTEXT.md / RESEARCH.md / PLAN.md を読み込む。
+ */
+async function loadPhaseFiles(planningRoot: string, phaseNum: number): Promise<string[]> {
+  const phasesDir = path.join(planningRoot, 'phases');
+  const parts: string[] = [];
+
+  let dirEntries: Dirent[] = [];
+  try {
+    dirEntries = await fs.readdir(phasesDir, { withFileTypes: true });
+  } catch {
+    return parts;
+  }
+
+  // ディレクトリのみを対象にし、フェーズ番号に一致するものを探す
+  const paddedNum = String(phaseNum).padStart(2, '0');
+  const phaseEntry = dirEntries.find(
+    (e) =>
+      e.isDirectory() &&
+      (e.name === String(phaseNum) ||
+        e.name.startsWith(`${phaseNum}-`) ||
+        e.name.startsWith(`${paddedNum}-`) ||
+        e.name === paddedNum)
+  );
+
+  if (!phaseEntry) return parts;
+
+  const phaseDir = phaseEntry.name;
+  const phaseRoot = path.join(phasesDir, phaseDir);
+  const phaseTargets = [
+    { pattern: `${paddedNum}-CONTEXT.md`, fallback: 'CONTEXT.md' },
+    { pattern: `${paddedNum}-RESEARCH.md`, fallback: 'RESEARCH.md' },
+    { pattern: 'PLAN.md' },
+  ];
+
+  for (const target of phaseTargets) {
+    const candidates = [target.pattern, ...(target.fallback ? [target.fallback] : [])] as string[];
+    for (const candidate of candidates) {
+      const fullPath = path.join(phaseRoot, candidate);
+      try {
+        const content = await fs.readFile(fullPath, 'utf-8');
+        parts.push(`### phases/${phaseDir}/${candidate}\n${content}`);
+        break;
+      } catch {
+        // try next candidate
+      }
+    }
+  }
+
+  return parts;
+}
+
+/**
+ * gsd-tools.cjs init <command> <phaseNum> を同期実行し、JSON 文字列を返す。
+ * 失敗した場合は null を返す（ブロックしない）。
+ * init をサポートしないコマンド・失敗時はフォールバックとして find-phase を試みる。
+ */
+async function preExecuteGsdToolsInit(
+  gsdToolsBin: string,
+  commandName: string,
+  phaseNum: number | null
+): Promise<string | null> {
+  const initCommands = new Set([
+    'plan-phase', 'execute-phase', 'verify-work', 'new-milestone', 'new-project',
+    'quick', 'resume', 'resume-work', 'map-codebase', 'progress', 'manager',
+  ]);
+
+  const phaseArg = phaseNum !== null ? [String(phaseNum)] : [];
+
+  // まず init <commandName> <phase> を試みる
+  if (initCommands.has(commandName)) {
+    try {
+      const result = execFileSync('node', [gsdToolsBin, 'init', commandName, ...phaseArg], {
+        cwd: process.cwd(),
+        timeout: 8000,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      return result.trim() || null;
+    } catch {
+      // fall through to find-phase
+    }
+  }
+
+  // フェーズ番号があれば find-phase でフェーズ情報だけでも取得する
+  if (phaseNum !== null) {
+    try {
+      const result = execFileSync('node', [gsdToolsBin, 'find-phase', String(phaseNum)], {
+        cwd: process.cwd(),
+        timeout: 5000,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      return result.trim() || null;
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
+
+/**
+ * ファイルを書き出す可能性があるコマンドかどうか判定する。
+ */
+function isFileWritingCommand(commandName: string): boolean {
+  const fileWriters = new Set([
+    'discuss-phase', 'plan-phase', 'execute-phase', 'research-phase',
+    'verify-work', 'new-milestone', 'new-project', 'complete-milestone',
+    'fast', 'do', 'quick', 'audit-milestone', 'audit-uat',
+  ]);
+  return fileWriters.has(commandName);
+}
+
+/**
+ * 引数文字列からフェーズ番号を抽出する。
+ * 先頭の数値トークンをフェーズ番号として扱う。
+ */
+function extractPhaseNumberFromArgs(args: string): number | null {
+  const m = args.match(/\b(\d+(?:\.\d+)?)\b/);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  return Number.isFinite(n) ? n : null;
 }
 
 // ─── .planning/ ファイル操作 ───────────────────────────────────────────────

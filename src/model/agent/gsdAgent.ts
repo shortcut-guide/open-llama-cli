@@ -14,7 +14,6 @@ import {
   saveGsdState,
   isBlockingErrorState,
   commandToPhase,
-  type GsdWorkflowState,
 } from '../../controller/gsdState.js';
 import { extractFileBlocks } from '../../controller/fileProposal.js';
 
@@ -153,6 +152,10 @@ async function runEscalationGate(
 /**
  * LLM 出力から ```file:... ブロックを抽出し、
  * .planning/ に属するものだけ自動書き込みする。
+ * 対応パス形式:
+ *   - `.planning/phases/N/FILE.md`   → planningRoot 相対に変換
+ *   - `phases/N/FILE.md`             → planningRoot 直下として扱う
+ *   - `phases/N-slug/FILE.md`        → 同上
  */
 async function writePlanningBlocks(
   output: string,
@@ -162,9 +165,13 @@ async function writePlanningBlocks(
   const written: string[] = [];
 
   for (const block of blocks) {
-    // .planning/ パスのみ対象
-    const rel = block.filePath.replace(/^\.planning\//, '');
-    if (rel === block.filePath && !block.filePath.startsWith('.planning')) {
+    let rel: string;
+
+    if (block.filePath.startsWith('.planning/')) {
+      rel = block.filePath.replace(/^\.planning\//, '');
+    } else if (block.filePath.startsWith('phases/')) {
+      rel = block.filePath;
+    } else {
       continue; // .planning/ 以外はスキップ（通常の fileProposal に任せる）
     }
 
@@ -224,6 +231,11 @@ export async function runGsdAgent(opts: GsdAgentOptions): Promise<GsdAgentResult
     lastCommand: commandName,
     ...(phaseNumber !== null ? { currentPhaseNumber: phaseNumber } : {}),
   });
+
+  // ── discuss-phase: 対話型マルチターンループ ────────────────────────────────
+  if (commandName === 'discuss-phase' && !args.includes('--auto')) {
+    return runDiscussPhaseInteractive(context, rl, history, planningRoot);
+  }
 
   // ── LLM メッセージ構築 ───────────────────────────────────────────────────
   const messages: Message[] = [
@@ -295,6 +307,96 @@ export async function runGsdAgent(opts: GsdAgentOptions): Promise<GsdAgentResult
   }
 
   return { output, gateReached, planningWrites };
+}
+
+// ─── discuss-phase 対話型ループ ───────────────────────────────────────────
+
+/**
+ * discuss-phase 専用のマルチターン実行。
+ *
+ * フロー:
+ *   1. 初回 LLM 呼び出し → 分析・質問提示
+ *   2. ユーザーが回答入力
+ *   3. 回答を含めて 2 回目 LLM 呼び出し → CONTEXT.md 生成
+ *
+ * ユーザーが空行を入力したり "skip" を入力したら対話をスキップして CONTEXT.md 生成へ進む。
+ * "--auto" フラグがある場合は通常の Revision Loop に流れるため、この関数は呼ばれない。
+ */
+async function runDiscussPhaseInteractive(
+  context: GsdContext,
+  rl: readline.Interface,
+  history: Message[],
+  planningRoot: string
+): Promise<GsdAgentResult> {
+  const commandName = context.command.name;
+
+  printRevisionHeader(commandName, 0, 1);
+
+  // ── ステップ 1: 分析フェーズ ────────────────────────────────────────────
+  console.log(chalk.gray('\n  💬 フェーズを分析しています...\n'));
+
+  const analysisPrompt = context.resolvedPrompt +
+    '\n\n<discuss_instruction>\n' +
+    'まず、このフェーズの灰色地帯（実装上の判断が必要な部分）を分析してください。\n' +
+    'その後、ユーザーに確認したい質問を番号付きリストで提示してください。\n' +
+    '質問は最大5つまで。具体的で答えやすい形にしてください。\n' +
+    'まだ CONTEXT.md は作成しないでください。\n' +
+    '</discuss_instruction>';
+
+  let analysisOutput: string;
+  try {
+    analysisOutput = await callLLM(
+      [...history, { role: 'user', content: analysisPrompt }],
+      { printStream: true, label: '💬 GSD:discuss-phase 分析', temperature: 0.3 }
+    );
+  } catch (e) {
+    console.log(chalk.red(`\n❌ LLM エラー: ${(e as Error).message}`));
+    return { output: '', gateReached: 'aborted', planningWrites: [] };
+  }
+
+  // ── ステップ 2: ユーザー回答収集 ────────────────────────────────────────
+  console.log(chalk.yellow('\n\n📝 上記の質問に回答してください。'));
+  console.log(chalk.gray('   (空行または "skip" で質問をスキップし、デフォルト判断で CONTEXT.md を生成します)\n'));
+
+  let userAnswers: string;
+  try {
+    userAnswers = await rl.question(chalk.blue('回答 > '));
+  } catch {
+    userAnswers = '';
+  }
+
+  const skipAnswering = !userAnswers.trim() || userAnswers.trim().toLowerCase() === 'skip';
+
+  // ── ステップ 3: CONTEXT.md 生成 ─────────────────────────────────────────
+  console.log(chalk.gray('\n  📝 CONTEXT.md を生成しています...\n'));
+
+  const contextGenPrompt = skipAnswering
+    ? 'ユーザーは質問をスキップしました。各質問について推奨デフォルトを選択し、CONTEXT.md を生成してください。'
+    : `ユーザーの回答: ${userAnswers}\n\nこの回答に基づいて CONTEXT.md を生成してください。`;
+
+  const fullMessages: Message[] = [
+    ...history,
+    { role: 'user',      content: analysisPrompt },
+    { role: 'assistant', content: analysisOutput },
+    { role: 'user',      content: contextGenPrompt },
+  ];
+
+  let contextOutput: string;
+  try {
+    contextOutput = await callLLM(
+      fullMessages,
+      { printStream: true, label: '📝 GSD:discuss-phase CONTEXT.md 生成', temperature: 0.3 }
+    );
+  } catch (e) {
+    console.log(chalk.red(`\n❌ LLM エラー: ${(e as Error).message}`));
+    return { output: analysisOutput, gateReached: 'escalated', planningWrites: [] };
+  }
+
+  // .planning/ 書き込み
+  const writes = await writePlanningBlocks(contextOutput, planningRoot);
+
+  const combinedOutput = `${analysisOutput}\n\n---\n\n${contextOutput}`;
+  return { output: combinedOutput, gateReached: 'done', planningWrites: writes };
 }
 
 // ─── ユーティリティ ────────────────────────────────────────────────────────
