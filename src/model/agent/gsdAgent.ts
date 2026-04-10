@@ -136,13 +136,30 @@ async function runPreflightGate(
 /**
  * 出力品質の簡易評価。
  * LLM が「何も生成しなかった」「エラーを返した」ケースを検知する。
+ * commandName が指定された場合、コマンド固有の追加チェックを行う。
  */
-function assessOutputQuality(output: string): { pass: boolean; reason?: string } {
+function assessOutputQuality(output: string, commandName?: string): { pass: boolean; reason?: string } {
   if (!output || output.trim().length < 30) {
     return { pass: false, reason: '出力が空または短すぎます。' };
   }
   if (/^(error|エラー|失敗)/i.test(output.trim())) {
     return { pass: false, reason: 'LLM がエラーを返しました。' };
+  }
+  // execute-phase: .planning/ 以外の実装ファイルが少なくとも1つ必要
+  if (commandName === 'execute-phase') {
+    const blocks = extractFileBlocks(output);
+    const implBlocks = blocks.filter(
+      (b) => !b.filePath.startsWith('.planning/') && !b.filePath.startsWith('phases/')
+    );
+    if (implBlocks.length === 0) {
+      return {
+        pass: false,
+        reason:
+          '実装ファイルが生成されていません。PLAN.md の各タスクを実行し、' +
+          'ソースコードや設定ファイルを ```file:パス``` 形式で出力してください。' +
+          '新しい PLAN.md の作成は禁止です。',
+      };
+    }
   }
   return { pass: true };
 }
@@ -304,7 +321,7 @@ export async function runGsdAgent(opts: GsdAgentOptions): Promise<GsdAgentResult
     planningWrites.push(...writes);
 
     // Revision Gate 評価
-    const quality = assessOutputQuality(output);
+    const quality = assessOutputQuality(output, commandName);
     if (quality.pass) {
       gateReached = 'done';
       break;

@@ -303,12 +303,23 @@ export async function resolveGsdContext(
       '\n\n<execute_phase_inline_instruction>\n' +
       'CRITICAL: open-llama-cli ではサブエージェントの生成やスポーニングはできません。\n' +
       '「Spawning agents...」「Task(...)」などのサブエージェント呼び出しを記述しないでください。\n\n' +
-      '代わりに、各 PLAN.md の内容をこのターンで直接インライン実行してください:\n' +
-      '1. 対象フェーズの PLAN.md を <current_planning_state> から読み込む\n' +
-      '2. PLAN.md に記載された全タスクを順番に実行し、実装ファイルを生成する\n' +
-      '3. 各実装ファイルは ```file:path/to/file``` 形式で出力する\n' +
-      '4. 実行が完了したら SUMMARY.md を ```file:.planning/phases/{phase_dir}/{plan}-SUMMARY.md``` 形式で出力する\n\n' +
-      '実行計画の説明だけを出力して終わらせないでください。必ず実際のファイル内容を出力してください。\n' +
+      '## あなたの役割: 実装者（コードを書く人）\n\n' +
+      '以下の手順で、このターン内で全タスクを完全に実装してください:\n\n' +
+      '1. <current_planning_state> に含まれる対象フェーズの PLAN.md を読む\n' +
+      '2. PLAN.md の各タスクを順番に実行し、**実際のソースコードや設定ファイルを生成する**\n' +
+      '3. 各実装ファイルを必ず ```file:src/path/to/file.ts``` 形式で出力する\n' +
+      '4. 全タスク完了後に SUMMARY.md を ```file:.planning/phases/{phase_dir}/{plan}-SUMMARY.md``` 形式で出力する\n\n' +
+      '## 厳守事項（違反すると失敗と見なされます）\n\n' +
+      '❌ 絶対にやってはいけないこと:\n' +
+      '- 新しい PLAN.md を作成する（PLAN.md は既に存在します。再作成は禁止）\n' +
+      '- 実装計画・やること一覧・説明文だけを出力して終わる\n' +
+      '- 「実装します」「これらのファイルを作成します」だけ書いて実際のコードを出さない\n' +
+      '- bash/shell コマンドブロックを出力する（実行されません）\n\n' +
+      '✅ 必ずやること:\n' +
+      '- 実際のファイル内容（完全なソースコード）を ```file:パス``` 形式で出力する\n' +
+      '- PLAN.md に記載された全タスクをこの1ターンで完了させる\n' +
+      '- 少なくとも1つ以上の実装ファイル（.planning/ 以外）を出力する\n\n' +
+      'SUMMARY.md の前に必ず実装ファイルを出力すること。実装ファイルが0件のまま終わるのは失敗です。\n' +
       '</execute_phase_inline_instruction>';
   }
 
