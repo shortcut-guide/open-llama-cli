@@ -277,9 +277,10 @@ export async function resolveGsdContext(
   if (isFileWritingCommand(cmd.name)) {
     resolvedPrompt +=
       '\n\n<file_output_instruction>\n' +
-      'このツールではシェルコマンドを実行できません。' +
-      'CONTEXT.md / PLAN.md / SUMMARY.md などを作成・更新する場合は、' +
+      'このツールではシェルコマンドを実行できません。ファイルを作成・更新する場合は、\n' +
       '必ず以下の形式でファイル内容を出力してください。この形式以外ではディスクに書き込まれません。\n\n' +
+      '【プランニングファイル (.planning/ 以下)】\n' +
+      'CONTEXT.md / PLAN.md / SUMMARY.md など .planning/ 配下のファイル:\n' +
       '```file:.planning/phases/{phase_dir}/{filename}\n' +
       '...ファイルの完全な内容...\n' +
       '```\n\n' +
@@ -287,8 +288,28 @@ export async function resolveGsdContext(
       '```file:.planning/{filename}\n' +
       '...ファイルの完全な内容...\n' +
       '```\n\n' +
+      '【実装ファイル (ソースコード・設定ファイルなど)】\n' +
+      'プロジェクトのソースコードや設定ファイルはプロジェクトルートからの相対パスで指定:\n' +
+      '```file:src/path/to/file.ts\n' +
+      '...ファイルの完全な内容...\n' +
+      '```\n\n' +
       'bashスクリプトや mkdir / cat コマンドは使わないでください。\n' +
       '</file_output_instruction>';
+  }
+
+  // 9. execute-phase 専用: インライン実行の強制指示
+  if (cmd.name === 'execute-phase') {
+    resolvedPrompt +=
+      '\n\n<execute_phase_inline_instruction>\n' +
+      'CRITICAL: open-llama-cli ではサブエージェントの生成やスポーニングはできません。\n' +
+      '「Spawning agents...」「Task(...)」などのサブエージェント呼び出しを記述しないでください。\n\n' +
+      '代わりに、各 PLAN.md の内容をこのターンで直接インライン実行してください:\n' +
+      '1. 対象フェーズの PLAN.md を <current_planning_state> から読み込む\n' +
+      '2. PLAN.md に記載された全タスクを順番に実行し、実装ファイルを生成する\n' +
+      '3. 各実装ファイルは ```file:path/to/file``` 形式で出力する\n' +
+      '4. 実行が完了したら SUMMARY.md を ```file:.planning/phases/{phase_dir}/{plan}-SUMMARY.md``` 形式で出力する\n\n' +
+      '実行計画の説明だけを出力して終わらせないでください。必ず実際のファイル内容を出力してください。\n' +
+      '</execute_phase_inline_instruction>';
   }
 
   return {
