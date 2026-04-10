@@ -226,7 +226,6 @@ export async function resolveGsdContext(
   let withArgs = cmd.prompt.replace(/\$ARGUMENTS/g, args.trim());
 
   // 2. TOML に埋め込まれた古い .gemini/get-shit-done/ パスを実際の gsdRoot に修正
-  //    (bash コマンド文字列中の絶対パスが LLM に見えるため、正しいパスを示す)
   withArgs = withArgs.replace(
     /['"](\/[^'"]*\/\.gemini\/get-shit-done\/bin\/gsd-tools\.cjs)['"]/g,
     `"${gsdToolsBin}"`
@@ -242,18 +241,39 @@ export async function resolveGsdContext(
   // 5. @path インライン展開
   const { expanded, files } = await resolveAtPaths(withArgs, gsdRoot);
 
-  // 6. 各コンテキストブロックを結合
-  let resolvedPrompt = expanded;
+  // 6. @path 展開後のコンテンツに残る .gemini/get-shit-done/ パスも修正
+  let resolvedPrompt = expanded.replace(
+    /["'`]?(\/[^"'`\s]*\/\.gemini\/get-shit-done\/bin\/gsd-tools\.cjs)["'`]?/g,
+    `"${gsdToolsBin}"`
+  );
+
+  // 7. ノーシェル実行モードの宣言（先頭に配置して最優先指示とする）
+  const noShellInstruction =
+    '<execution_environment>\n' +
+    'This workflow is running inside open-llama-cli — a pure LLM runtime with NO shell execution capability.\n\n' +
+    'CRITICAL RULES:\n' +
+    '1. DO NOT output bash/shell code blocks. You cannot execute them and they will confuse the user.\n' +
+    '2. ALL gsd-tools.cjs command outputs have been pre-computed and are provided in <gsd_init_data> below.\n' +
+    '   Treat those values as already-resolved variables (INIT, AGENT_SKILLS_*, etc.).\n' +
+    '3. Skip every "Setup" / "MANDATORY FIRST STEP" bash execution block — the data is already available.\n' +
+    '4. Proceed directly to the substantive workflow steps (questioning, analysis, file generation).\n' +
+    '5. RUNTIME is "open-llama-cli". Ignore runtime-detection bash blocks.\n' +
+    '</execution_environment>\n\n';
+
+  resolvedPrompt = noShellInstruction + resolvedPrompt;
 
   if (planningSnapshot) {
     resolvedPrompt += `\n\n<current_planning_state>\n${planningSnapshot}\n</current_planning_state>`;
   }
 
   if (initData) {
-    resolvedPrompt += `\n\n<gsd_init_data>\nこれは gsd-tools.cjs init の実行結果です。上記プロンプト内のシェルコマンドで取得するはずだったデータです。\n${initData}\n</gsd_init_data>`;
+    resolvedPrompt += `\n\n<gsd_init_data>\n` +
+      `以下は gsd-tools.cjs init の実行済み結果です。ワークフロー内の bash セットアップブロックが取得するはずだったデータです。\n` +
+      `変数として扱ってください: INIT, AGENT_SKILLS_RESEARCHER, AGENT_SKILLS_SYNTHESIZER, AGENT_SKILLS_ROADMAPPER など。\n` +
+      `${initData}\n</gsd_init_data>`;
   }
 
-  // 7. ファイル出力フォーマットの明示（ファイルを書くコマンド用）
+  // 8. ファイル出力フォーマットの明示（ファイルを書くコマンド用）
   if (isFileWritingCommand(cmd.name)) {
     resolvedPrompt +=
       '\n\n<file_output_instruction>\n' +
@@ -263,7 +283,10 @@ export async function resolveGsdContext(
       '```file:.planning/phases/{phase_dir}/{filename}\n' +
       '...ファイルの完全な内容...\n' +
       '```\n\n' +
-      '例: .planning/phases/03-frontend-chat-ui/03-CONTEXT.md\n' +
+      'PROJECT.md / REQUIREMENTS.md / ROADMAP.md などトップレベルファイルは:\n' +
+      '```file:.planning/{filename}\n' +
+      '...ファイルの完全な内容...\n' +
+      '```\n\n' +
       'bashスクリプトや mkdir / cat コマンドは使わないでください。\n' +
       '</file_output_instruction>';
   }

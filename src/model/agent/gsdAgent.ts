@@ -237,6 +237,12 @@ export async function runGsdAgent(opts: GsdAgentOptions): Promise<GsdAgentResult
     return runDiscussPhaseInteractive(context, rl, history, planningRoot);
   }
 
+  // ── 初期化系コマンド: 汎用マルチターン対話ループ ─────────────────────────
+  const INTERACTIVE_COMMANDS = new Set(['new-project', 'new-milestone', 'import']);
+  if (INTERACTIVE_COMMANDS.has(commandName) && !args.includes('--auto')) {
+    return runInteractiveGsdLoop(context, rl, history, planningRoot, commandName);
+  }
+
   // ── LLM メッセージ構築 ───────────────────────────────────────────────────
   const messages: Message[] = [
     ...history,
@@ -307,6 +313,127 @@ export async function runGsdAgent(opts: GsdAgentOptions): Promise<GsdAgentResult
   }
 
   return { output, gateReached, planningWrites };
+}
+
+// ─── 汎用マルチターン対話ループ ───────────────────────────────────────────
+
+/**
+ * new-project / new-milestone / import など、
+ * 複数ターンのユーザー対話が必要なコマンド向けの汎用ループ。
+ *
+ * フロー:
+ *   1. 初回 LLM 呼び出し → ワークフロー開始・質問提示
+ *   2. ユーザーが回答入力（空行 or "/done" で早期終了）
+ *   3. 会話履歴に追加して LLM 再呼び出し → 次ステップ実行
+ *   4. コマンド別の必須ファイルがすべて生成されたら自動完了
+ *   5. maxTurns に達したら Escalation Gate へ
+ */
+async function runInteractiveGsdLoop(
+  context: GsdContext,
+  rl: readline.Interface,
+  history: Message[],
+  planningRoot: string,
+  commandName: string,
+  maxTurns = 20
+): Promise<GsdAgentResult> {
+  // コマンドごとの「完了」を示す必須ファイル
+  const TERMINAL_FILES: Record<string, string[]> = {
+    'new-project':   ['PROJECT.md', 'REQUIREMENTS.md', 'ROADMAP.md'],
+    'new-milestone': ['ROADMAP.md'],
+    'import':        ['PROJECT.md', 'ROADMAP.md'],
+  };
+
+  const terminalFiles = TERMINAL_FILES[commandName] ?? [];
+  const messages: Message[] = [
+    ...history,
+    { role: 'user', content: context.resolvedPrompt },
+  ];
+
+  let latestOutput   = '';
+  let allWrites: string[] = [];
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    // ヘッダー表示（初回のみ大枠）
+    if (turn === 0) {
+      printRevisionHeader(commandName, 0, maxTurns);
+    } else {
+      console.log(chalk.cyan(`\n🔁 ターン ${turn + 1}/${maxTurns}`));
+    }
+
+    // LLM 呼び出し
+    try {
+      latestOutput = await callLLM(messages, {
+        printStream: true,
+        label:       `🎯 GSD:${commandName}`,
+        temperature: 0.3,
+      });
+    } catch (e) {
+      console.log(chalk.red(`\n❌ LLM エラー: ${(e as Error).message}`));
+      await saveGsdState({ phase: 'error', errorMessage: (e as Error).message, lastCommand: commandName });
+      return { output: latestOutput, gateReached: 'aborted', planningWrites: allWrites };
+    }
+
+    // .planning/ ファイル書き込み
+    const writes = await writePlanningBlocks(latestOutput, planningRoot);
+    allWrites.push(...writes);
+
+    // アシスタント発言を会話履歴へ追加
+    messages.push({ role: 'assistant', content: latestOutput });
+
+    // ── 完了判定: 必須ファイルがすべて揃ったか確認 ──────────────────────
+    if (terminalFiles.length > 0) {
+      const missing = await Promise.all(
+        terminalFiles.map(async (f) => ({ f, exists: await planningFileExists(planningRoot, f) }))
+      );
+      const allPresent = missing.every((m) => m.exists);
+
+      if (allPresent) {
+        console.log(chalk.green('\n✅ 必須ファイルがすべて生成されました。ワークフロー完了。'));
+        await saveGsdState({ phase: commandToPhase(commandName), lastCommand: commandName });
+        return { output: latestOutput, gateReached: 'done', planningWrites: allWrites };
+      }
+
+      // 何か書き込まれたが未完了の場合はどのファイルが残っているか表示
+      if (writes.length > 0) {
+        const remaining = missing.filter((m) => !m.exists).map((m) => m.f);
+        console.log(chalk.gray(`  残りファイル: ${remaining.join(', ')}`));
+      }
+    }
+
+    // ── ユーザー入力待ち ─────────────────────────────────────────────────
+    console.log(chalk.yellow('\n💬 応答を入力してください。'));
+    console.log(chalk.gray('  （空行または "/done" で終了 | "/abort" で中断）\n'));
+
+    let userInput: string;
+    try {
+      userInput = await rl.question(chalk.blue('> '));
+    } catch {
+      break; // readline が閉じられた
+    }
+
+    const trimmed = userInput.trim();
+
+    if (!trimmed || trimmed === '/done') {
+      console.log(chalk.gray('\n  対話を終了します。'));
+      break;
+    }
+
+    if (trimmed === '/abort') {
+      await saveGsdState({ phase: 'error', errorMessage: 'ユーザーが中断しました', lastCommand: commandName });
+      return { output: latestOutput, gateReached: 'aborted', planningWrites: allWrites };
+    }
+
+    // ユーザー発言を会話履歴へ追加
+    messages.push({ role: 'user', content: trimmed });
+  }
+
+  // maxTurns 超過 or 早期終了: 生成されたものがあれば done 扱い
+  const gateReached: GsdGateResult = allWrites.length > 0 ? 'done' : 'escalated';
+  await saveGsdState({
+    phase: isTerminalCommand(commandName) ? 'done' : commandToPhase(commandName),
+    lastCommand: commandName,
+  });
+  return { output: latestOutput, gateReached, planningWrites: allWrites };
 }
 
 // ─── discuss-phase 対話型ループ ───────────────────────────────────────────
