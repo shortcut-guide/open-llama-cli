@@ -17,9 +17,13 @@ export async function handleFileEditProposals(
   assistantMessage: string,
   history: Message[],
   rl: readline.Interface,
-  autoWrite: boolean
+  autoWrite: boolean,
+  excludePathPrefixes: string[] = []
 ): Promise<void> {
-  const proposals = extractFileBlocks(assistantMessage);
+  const allProposals = extractFileBlocks(assistantMessage);
+  const proposals = excludePathPrefixes.length > 0
+    ? allProposals.filter((p) => !excludePathPrefixes.some((prefix) => p.filePath.startsWith(prefix)))
+    : allProposals;
   if (proposals.length === 0) return;
 
   console.log(chalk.yellow(`\n📝 ${proposals.length}件のファイルブロックを検知:\n`));

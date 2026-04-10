@@ -187,8 +187,9 @@ export async function handleGsdCommand(
   await saveHistory(ctx.history);
 
   // .planning/ 以外のファイルブロックは既存の fileProposal に委譲
+  // （.planning/ ブロックは writePlanningBlocks で既に書き込み済みのため除外）
   if (result.gateReached !== 'aborted') {
-    await handleFileEditProposals(result.output, ctx.history, rl, getAutoWrite());
+    await handleFileEditProposals(result.output, ctx.history, rl, getAutoWrite(), ['.planning/', 'phases/']);
   }
 
   return true;
