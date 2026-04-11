@@ -4,3 +4,5 @@ package-lock.json
 node_modules/
 .env
 dist/
+chat_history.json
+chat_history.json.migrated
