@@ -35,6 +35,7 @@ export interface Config {
   AUTO_WRITE_DEFAULT: boolean;
   SYSTEM_PROMPT: string;
   MAX_REVIEW_ITERATIONS: number;
+  INPUT_HISTORY_MAX: number;
 }
 
 export function getConfig(): Config {
@@ -48,5 +49,6 @@ export function getConfig(): Config {
     AUTO_WRITE_DEFAULT: process.env.AUTO_WRITE === 'true' || process.env.AUTO_WRITE === '1',
     SYSTEM_PROMPT: process.env.SYSTEM_PROMPT || 'あなたは優秀なAIアシスタントです。',
     MAX_REVIEW_ITERATIONS: parseInt(process.env.MAX_REVIEW_ITERATIONS || '3', 10),
+    INPUT_HISTORY_MAX: parseInt(process.env.INPUT_HISTORY_MAX || '500', 10),
   };
 }

@@ -8,6 +8,7 @@ import * as path from 'node:path';
 
 import { initializeConfig, getConfig } from './config/index.js';
 import { loadHistory, saveHistory } from './model/history/index.js';
+import { loadInputHistory, appendInputHistory } from './model/inputHistory/index.js';
 import { setWorkspaceRoot } from './model/file/index.js';
 import { callLLM, type Message } from './model/llm/index.js';
 import {
@@ -65,10 +66,28 @@ async function main(): Promise<void> {
   printHint();
 
   const history: Message[] = await loadHistory(fullSystemPrompt);
+  const inputHistory = await loadInputHistory(config.INPUT_HISTORY_MAX);
+  const sessionInputs: string[] = [];
+
+  const saveSessionHistory = async () => {
+    if (sessionInputs.length > 0) {
+      await appendInputHistory(sessionInputs, config.INPUT_HISTORY_MAX);
+    }
+  };
+
+  process.on('exit', () => { void saveSessionHistory(); });
+  process.on('SIGINT', async () => { await saveSessionHistory(); process.exit(0); });
+  process.on('SIGTERM', async () => { await saveSessionHistory(); process.exit(0); });
 
   while (true) {
-    const userInput = await readUserInput(chalk.blue('You: '));
+    const userInput = await readUserInput(chalk.blue('You: '), inputHistory);
     if (!userInput.trim()) continue;
+
+    // 入力履歴に追加（重複を除く）
+    if (inputHistory[inputHistory.length - 1] !== userInput) {
+      inputHistory.push(userInput);
+      sessionInputs.push(userInput);
+    }
 
     // ✅ コマンド処理（/agent含む）
     const handled = await handleCommand(userInput, rl, {

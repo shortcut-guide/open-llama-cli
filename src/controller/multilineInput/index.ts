@@ -1,6 +1,11 @@
 // src/controller/multilineInput/index.ts
 import chalk from 'chalk';
 
+const UP_ARROW   = '\x1b[A';
+const DOWN_ARROW = '\x1b[B';
+const LEFT_ARROW = '\x1b[D';
+const RIGHT_ARROW = '\x1b[C';
+
 /** Shift+Enter として認識するエスケープシーケンス（端末別） */
 const SHIFT_ENTER_SEQS = [
   '\x1b\r',       // ESC + CR  (iTerm2 / meta+enter)
@@ -18,7 +23,7 @@ const PASTE_END   = '\x1b[201~';
  * - ブラケットペースト → 複数行ペーストを正しく処理
  * - 非 TTY 環境 (CI/pipe) → readline でフォールバック
  */
-export async function readUserInput(prompt: string): Promise<string> {
+export async function readUserInput(prompt: string, inputHistory: string[] = []): Promise<string> {
   if (!process.stdin.isTTY) {
     return readLineFallback(prompt);
   }
@@ -27,6 +32,18 @@ export async function readUserInput(prompt: string): Promise<string> {
     const lines: string[] = [''];
     let buf = '';
     let inPaste = false;
+
+    // ── 履歴ナビゲーション状態 ──────────────────────────────────────
+    let historyIdx = inputHistory.length; // 末尾+1を指すことで「未選択」
+    let savedInput = '';                  // 履歴を遡る前の入力内容
+
+    /** 現在行の表示を newText で置き換える（シングルライン時のみ） */
+    const replaceCurrentLine = (newText: string) => {
+      const current = lines[lines.length - 1];
+      process.stdout.write('\b \b'.repeat(current.length));
+      lines[lines.length - 1] = newText;
+      process.stdout.write(newText);
+    };
 
     process.stdout.write('\x1b[?2004h'); // bracketed paste on
     process.stdout.write(prompt);
@@ -96,9 +113,47 @@ export async function readUserInput(prompt: string): Promise<string> {
         }
         if (shiftEnterHit) continue;
 
-        // ESC で始まり、Shift+Enter になり得る場合は次のデータを待つ
+        // ── ↑↓ 矢印キー（履歴ナビゲーション）────────────────────────
+        if (buf.startsWith(UP_ARROW) || buf.startsWith(DOWN_ARROW)) {
+          if (lines.length === 1) {
+            if (buf.startsWith(UP_ARROW)) {
+              buf = buf.slice(UP_ARROW.length);
+              if (historyIdx > 0) {
+                if (historyIdx === inputHistory.length) {
+                  savedInput = lines[0]; // 現在の入力を保存
+                }
+                historyIdx--;
+                replaceCurrentLine(inputHistory[historyIdx]);
+              }
+            } else {
+              buf = buf.slice(DOWN_ARROW.length);
+              if (historyIdx < inputHistory.length) {
+                historyIdx++;
+                const next = historyIdx === inputHistory.length ? savedInput : inputHistory[historyIdx];
+                replaceCurrentLine(next);
+              }
+            }
+          } else {
+            // マルチライン時は矢印キーをスキップ
+            buf = buf.startsWith(UP_ARROW)
+              ? buf.slice(UP_ARROW.length)
+              : buf.slice(DOWN_ARROW.length);
+          }
+          continue;
+        }
+
+        // ── ←→ 矢印キー（無視）────────────────────────────────────────
+        if (buf.startsWith(LEFT_ARROW) || buf.startsWith(RIGHT_ARROW)) {
+          buf = buf.startsWith(LEFT_ARROW)
+            ? buf.slice(LEFT_ARROW.length)
+            : buf.slice(RIGHT_ARROW.length);
+          continue;
+        }
+
+        // ESC で始まり、Shift+Enter またはアロー入力になり得る場合は次のデータを待つ
         if (buf.startsWith('\x1b') && buf.length < 8) {
-          if (SHIFT_ENTER_SEQS.some(s => s.startsWith(buf))) return;
+          const allSeqs = [...SHIFT_ENTER_SEQS, UP_ARROW, DOWN_ARROW, LEFT_ARROW, RIGHT_ARROW];
+          if (allSeqs.some(s => s.startsWith(buf))) return;
           // 不明なエスケープシーケンス → ESC をスキップ
           buf = buf.slice(1);
           continue;
