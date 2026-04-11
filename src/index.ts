@@ -23,6 +23,7 @@ import { handleFileEditProposals } from './controller/fileProposal/index.js';
 import { readUserInput } from './controller/multilineInput/index.js';
 import { getTokenUsage } from './model/history/index.js';
 import { initSession } from './model/session/index.js';
+import { expandMentions } from './model/mention/index.js';
 import {
   printBanner,
   printAutoWriteStatus,
@@ -118,6 +119,11 @@ async function main(): Promise<void> {
       messageContent = `${pending}\n\n指示: ${userInput}`;
       clearPendingFileContext();
     }
+
+    // Expand @filename mentions inline
+    const mentionResult = await expandMentions(messageContent);
+    if (mentionResult.content === null) continue;
+    messageContent = mentionResult.content;
 
     history.push({ role: 'user', content: messageContent });
 
