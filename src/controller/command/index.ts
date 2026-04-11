@@ -33,6 +33,7 @@ import { handleLspCommand } from './lspCommand.js';
 import { handleMcpCommand } from './mcpCommand.js';
 import { handleReviewCommand } from './reviewCommand.js';
 import { handlePrCommand } from './prCommand.js';
+import { handleShareCommand } from './shareCommand.js';
 
 export { CommandContext } from './types.js';
 export { getAutoWrite, setAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state/index.js';
@@ -80,6 +81,7 @@ export async function handleCommand(
   if (trimmed.startsWith('/mcp'))              return handleMcpCommand(trimmed);
   if (trimmed.startsWith('/review'))           return handleReviewCommand(trimmed);
   if (trimmed.startsWith('/pr'))               return handlePrCommand(trimmed, rl);
+  if (trimmed.startsWith('/share'))            return handleShareCommand(trimmed, ctx);
 
   return false;
 }

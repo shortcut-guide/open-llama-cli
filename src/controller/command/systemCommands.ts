@@ -99,6 +99,8 @@ export function handleHelpCommand(): boolean {
 │  /rewind                       │ 直前ターンの変更をロールバック   │
 │  /context                      │ トークン使用量を表示             │
 │  /compact                      │ 会話を要約・圧縮                 │
+│  /share [--format md|html]     │ セッションをMarkdown/HTMLに保存  │
+│  /share --gist                 │ GitHub Gistに公開（要gh CLI）    │
 │  /instructions                 │ 読み込み済み指示ファイル一覧     │
 │  /exit                         │ 終了                             │
 ├────────────────────────────────┼─────────────────────────────────┤
