@@ -114,6 +114,8 @@ export function handleHelpCommand(): boolean {
 │  /terminal-setup               │ 端末設定の案内を表示             │
 │  /diff [--staged] [--review]  │ git diff をカラー表示・AIレビュー│
 │  /review [--staged] [<file>]  │ AIコードレビュー（差分を解析）   │
+  │  /pr create [--force]         │ LLMでPR生成して作成              │
+  │  /pr status                   │ カレントブランチのPR状態を表示   │
 │  /lsp [status]                │ LSPサーバー接続状態を表示        │
   │  /mcp [list]                  │ MCPサーバー一覧と状態を表示      │
   │  /mcp add <name> <cmd> [args] │ MCPサーバーを追加                │
