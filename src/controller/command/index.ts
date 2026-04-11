@@ -31,6 +31,7 @@ import {
 } from './sessionCommands.js';
 import { handleLspCommand } from './lspCommand.js';
 import { handleMcpCommand } from './mcpCommand.js';
+import { handleReviewCommand } from './reviewCommand.js';
 
 export { CommandContext } from './types.js';
 export { getAutoWrite, setAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state/index.js';
@@ -76,6 +77,7 @@ export async function handleCommand(
   if (trimmed === '/exit' || trimmed === '/quit') handleExitCommand();
   if (trimmed.startsWith('/lsp'))              return handleLspCommand(trimmed);
   if (trimmed.startsWith('/mcp'))              return handleMcpCommand(trimmed);
+  if (trimmed.startsWith('/review'))           return handleReviewCommand(trimmed);
 
   return false;
 }

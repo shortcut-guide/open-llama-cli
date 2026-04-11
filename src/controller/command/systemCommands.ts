@@ -113,6 +113,7 @@ export function handleHelpCommand(): boolean {
 │  Ctrl+U                        │ 現在行をクリア                   │
 │  /terminal-setup               │ 端末設定の案内を表示             │
 │  /diff [--staged] [--review]  │ git diff をカラー表示・AIレビュー│
+│  /review [--staged] [<file>]  │ AIコードレビュー（差分を解析）   │
 │  /lsp [status]                │ LSPサーバー接続状態を表示        │
   │  /mcp [list]                  │ MCPサーバー一覧と状態を表示      │
   │  /mcp add <name> <cmd> [args] │ MCPサーバーを追加                │
