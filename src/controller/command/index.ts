@@ -17,6 +17,7 @@ import {
   handleHelpCommand,
   handleExitCommand,
 } from './systemCommands.js';
+import { handleShellCommand } from './shellCommand.js';
 
 export { CommandContext } from './types.js';
 export { getAutoWrite, setAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state/index.js';
@@ -34,6 +35,9 @@ export async function handleCommand(
   ctx: CommandContext
 ): Promise<boolean> {
   const trimmed = userInput.trim();
+
+  // シェルコマンド直接実行: ! プレフィックス
+  if (trimmed.startsWith('!'))            return handleShellCommand(trimmed);
 
   // GSD ワークフローコマンド: /gsd:<name> [args]
   if (trimmed.startsWith('/gsd:'))        return handleGsdCommand(trimmed, rl, ctx);
