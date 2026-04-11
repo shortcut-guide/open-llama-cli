@@ -161,6 +161,22 @@ export async function readUserInput(prompt: string): Promise<string> {
   });
 }
 
+/** @deprecated agentCommand 向け後方互換。/end で送信する旧式のマルチライン入力 */
+export async function readMultiline(rl: import('node:readline/promises').Interface): Promise<string> {
+  return new Promise((resolve) => {
+    console.log(chalk.gray("\n📝 複数行入力モード（/end で送信）\n"));
+    const lines: string[] = [];
+    rl.on('line', (line) => {
+      if (line.trim() === '/end') {
+        rl.removeAllListeners('line');
+        resolve(lines.join('\n'));
+      } else {
+        lines.push(line);
+      }
+    });
+  });
+}
+
 /** 非 TTY 環境向けフォールバック */
 async function readLineFallback(prompt: string): Promise<string> {
   const { createInterface } = await import('node:readline/promises');
