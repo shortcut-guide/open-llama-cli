@@ -1,6 +1,6 @@
 // src/agents/analyzer/analyzer.ts
 import { callLLM, type Message } from '../../model/llm.js';
-import { type FileAnalysis } from './types.js';
+import { type FileAnalysis, isFileAnalysis } from './types.js';
 import { buildAnalyzerPrompt } from './prompt.js';
 import { extractJSON } from './parseOutput.js';
 
@@ -35,8 +35,12 @@ export async function runAnalyzer(params: {
 
   try {
     const json = extractJSON(text);
-    return json as FileAnalysis;
+    if (!isFileAnalysis(json)) {
+      throw new Error("Parsed JSON does not match FileAnalysis shape");
+    }
+    return json;
   } catch (e) {
+    console.error('[analyzer] parse failed:', e instanceof Error ? e.message : e);
     return { path: filePath, exports: [], dependencies: [], functions: [], analysis: text };
   }
 }

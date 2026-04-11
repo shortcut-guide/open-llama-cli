@@ -13,3 +13,14 @@ export type FileAnalysis = {
   dependencies: string[];
   functions: FunctionInfo[];
 };
+
+export function isFileAnalysis(obj: unknown): obj is FileAnalysis {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const o = obj as Record<string, unknown>;
+  return (
+    typeof o.path === 'string' &&
+    Array.isArray(o.exports) &&
+    Array.isArray(o.dependencies) &&
+    Array.isArray(o.functions)
+  );
+}
