@@ -31,6 +31,7 @@ import {
   printHint,
   printGsdStatusIfActive,
 } from './view/display/index.js';
+import { initLsp, stopAllLsp, setLspWorkspaceRoot } from './model/lsp/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +42,10 @@ async function main(): Promise<void> {
   const config = getConfig();
   setWorkspaceRoot(config.WORKSPACE_ROOT);
   setAutoWrite(config.AUTO_WRITE_DEFAULT);
+  setLspWorkspaceRoot(config.WORKSPACE_ROOT);
+
+  // Initialize LSP servers in the background (non-blocking)
+  void initLsp();
 
   const instructions = await loadInstructions(config.WORKSPACE_ROOT);
   const instructionsPrompt = buildInstructionsPrompt(instructions);
@@ -89,9 +94,14 @@ async function main(): Promise<void> {
     }
   };
 
+  const cleanup = async () => {
+    await saveSessionHistory();
+    await stopAllLsp();
+  };
+
   process.on('exit', () => { void saveSessionHistory(); });
-  process.on('SIGINT', async () => { await saveSessionHistory(); process.exit(0); });
-  process.on('SIGTERM', async () => { await saveSessionHistory(); process.exit(0); });
+  process.on('SIGINT', async () => { await cleanup(); process.exit(0); });
+  process.on('SIGTERM', async () => { await cleanup(); process.exit(0); });
 
   while (true) {
     const userInput = await readUserInput(chalk.blue('You: '), inputHistory);
