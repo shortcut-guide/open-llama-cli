@@ -1,12 +1,13 @@
 // src/controller/fileProposal.ts
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
-import { readFileContent, writeFile } from '../../model/file/index.js';
+import { readFileContent, writeFile, resolveSafe } from '../../model/file/index.js';
 import { type Message } from '../../model/llm/index.js';
 import { extractFileBlocks } from './extractFileBlocks.js';
 import { sanityCheckWrite, SANITY_RATIO } from './sanityCheck.js';
 import { fetchFileContentInChunks } from './chunkFetcher.js';
 import { getCachedLineCount } from './lineCountCache.js';
+import { backupFiles, cleanOldBackups } from '../../model/backup/index.js';
 
 // lineCountCache の公開 API は lineCountCache.ts から直接 import して使用してください
 export { getLineCountCache, getCachedLineCount, setCachedLineCount } from './lineCountCache.js';
@@ -58,6 +59,18 @@ export async function handleFileEditProposals(
   }
 
   if (resolvedProposals.length === 0) return;
+
+  // Backup originals before any write so /rewind can restore them
+  const absPaths = resolvedProposals.map((p) => {
+    try { return resolveSafe(p.filePath); } catch { return null; }
+  }).filter((p): p is string => p !== null);
+
+  if (absPaths.length > 0) {
+    try {
+      await cleanOldBackups();
+      await backupFiles(absPaths);
+    } catch { /* backup failure is non-fatal */ }
+  }
 
   if (autoWrite) {
     await writeProposals(resolvedProposals, rl);

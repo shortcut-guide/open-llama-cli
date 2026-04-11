@@ -17,6 +17,7 @@ import {
   handleHelpCommand,
   handleExitCommand,
   handleTerminalSetupCommand,
+  handleRewindCommand,
 } from './systemCommands.js';
 import { handleShellCommand } from './shellCommand.js';
 import { handleDiffCommand } from './diffCommand.js';
@@ -53,6 +54,7 @@ export async function handleCommand(
   if (trimmed.startsWith('/delete '))     return handleDeleteCommand(trimmed, rl);
   if (trimmed.startsWith('/diff'))         return handleDiffCommand(trimmed, ctx);
   if (trimmed === '/clear')               return handleClearCommand();
+  if (trimmed === '/rewind')              return handleRewindCommand();
   if (trimmed === '/help')                return handleHelpCommand();
   if (trimmed === '/terminal-setup')      return handleTerminalSetupCommand();
   if (trimmed === '/exit' || trimmed === '/quit') handleExitCommand();

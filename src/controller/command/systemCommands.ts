@@ -1,7 +1,8 @@
 // src/controller/command/systemCommands.ts
 import chalk from 'chalk';
 
-import { clearHistory } from '../../model/history/index.js';
+import { clearHistory, rewindHistory } from '../../model/history/index.js';
+import { popFromStack, restoreBackup, getStackSize } from '../../model/backup/index.js';
 import { getAutoWrite, setAutoWrite } from '../state/index.js';
 
 export async function handleAutowriteCommand(trimmed: string): Promise<boolean> {
@@ -84,6 +85,7 @@ export function handleHelpCommand(): boolean {
 │  /replace <path> <s> => <r>    │ 文字列置換                       │
 │  /delete <path>                │ ファイル削除（確認あり）          │
 │  /clear                        │ チャット履歴をクリア             │
+│  /rewind                       │ 直前ターンの変更をロールバック   │
 │  /exit                         │ 終了                             │
 ├────────────────────────────────┼─────────────────────────────────┤
 │  シェル実行                                                        │
@@ -105,4 +107,43 @@ export function handleHelpCommand(): boolean {
 export function handleExitCommand(): never {
   console.log(chalk.cyan('\n👋 終了します。\n'));
   process.exit(0);
+}
+
+export async function handleRewindCommand(): Promise<boolean> {
+  const remaining = await getStackSize();
+  if (remaining === 0) {
+    console.log(chalk.yellow('  ⚠️  巻き戻せるターンがありません。'));
+    return true;
+  }
+
+  const entry = await popFromStack();
+  if (!entry) {
+    console.log(chalk.yellow('  ⚠️  巻き戻せるターンがありません。'));
+    return true;
+  }
+
+  // Restore files
+  if (entry.files.length > 0) {
+    try {
+      await restoreBackup(entry);
+      console.log(chalk.green(`  ✅ ${entry.files.length}件のファイルを復元しました。`));
+    } catch (e: unknown) {
+      console.error(chalk.red(`  ❌ ファイル復元に失敗しました: ${(e as Error).message}`));
+    }
+  }
+
+  // Rewind chat history
+  const rewound = await rewindHistory();
+  if (rewound) {
+    console.log(chalk.green('  ✅ チャット履歴を1ターン巻き戻しました。'));
+  } else {
+    console.log(chalk.gray('  チャット履歴に巻き戻す内容がありませんでした。'));
+  }
+
+  const newSize = await getStackSize();
+  if (newSize > 0) {
+    console.log(chalk.gray(`  ℹ️  さらに ${newSize} ターン巻き戻せます。`));
+  }
+
+  return true;
 }
