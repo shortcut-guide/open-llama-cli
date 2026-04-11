@@ -79,6 +79,12 @@ export function handleHelpCommand(): boolean {
 │  /gsd:verify-work <N>          │ フェーズ N の成果物を検証        │
 │  /gsd:next [--force]           │ 次のステップへ自動進行           │
 ├────────────────────────────────┼─────────────────────────────────┤
+│  セッション管理                                                    │
+│  /session list                 │ セッション一覧を表示             │
+│  /session new                  │ 新しいセッションを作成           │
+│  /resume [id|name]             │ セッションを切り替え             │
+│  /rename <name>                │ 現在のセッション名を変更         │
+├────────────────────────────────┼─────────────────────────────────┤
 │  Multi-Agent / ファイル操作                                        │
 │  /agent <task>                 │ Multi-Agent モードで実行         │
 │  /autowrite [on|off]           │ 自動書き込みトグル               │

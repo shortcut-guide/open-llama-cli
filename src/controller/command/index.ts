@@ -23,6 +23,11 @@ import {
 } from './systemCommands.js';
 import { handleShellCommand } from './shellCommand.js';
 import { handleDiffCommand } from './diffCommand.js';
+import {
+  handleSessionCommand,
+  handleResumeCommand,
+  handleRenameCommand,
+} from './sessionCommands.js';
 
 export { CommandContext } from './types.js';
 export { getAutoWrite, setAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state/index.js';
@@ -55,6 +60,9 @@ export async function handleCommand(
   if (trimmed.startsWith('/replace '))    return handleReplaceCommand(trimmed);
   if (trimmed.startsWith('/delete '))     return handleDeleteCommand(trimmed, rl);
   if (trimmed.startsWith('/diff'))         return handleDiffCommand(trimmed, ctx);
+  if (trimmed.startsWith('/session'))      return handleSessionCommand(trimmed, ctx);
+  if (trimmed.startsWith('/resume'))       return handleResumeCommand(trimmed, ctx);
+  if (trimmed.startsWith('/rename ') || trimmed === '/rename') return handleRenameCommand(trimmed);
   if (trimmed === '/clear')               return handleClearCommand();
   if (trimmed === '/rewind')              return handleRewindCommand();
   if (trimmed === '/context')             return handleContextCommand(ctx);

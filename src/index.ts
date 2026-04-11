@@ -21,6 +21,7 @@ import {
 import { handleFileEditProposals } from './controller/fileProposal/index.js';
 import { readUserInput } from './controller/multilineInput/index.js';
 import { getTokenUsage } from './model/history/index.js';
+import { initSession } from './model/session/index.js';
 import {
   printBanner,
   printAutoWriteStatus,
@@ -55,6 +56,9 @@ async function main(): Promise<void> {
 注意: 複数のファイルを変更する場合は、このブロックを複数回出力してください。
 `;
 
+  // Initialize session (migrate legacy chat_history.json if present)
+  const currentSession = await initSession(fullSystemPrompt);
+
   const rl = readline.createInterface({
     input,
     output,
@@ -63,6 +67,7 @@ async function main(): Promise<void> {
   printBanner();
   printWorkspaceInfo(config.WORKSPACE_ROOT);
   printAutoWriteStatus(getAutoWrite());
+  console.log(chalk.gray(`  📂 セッション: ${currentSession.name}  [${currentSession.id.slice(0, 8)}]`));
   await printGsdStatusIfActive();
   printHint();
 
