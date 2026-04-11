@@ -154,13 +154,48 @@ export async function readUserInput(prompt: string, inputHistory: string[] = [])
           continue;
         }
 
-        // ESC で始まり、Shift+Enter またはアロー入力になり得る場合は次のデータを待つ
-        if (buf.startsWith('\x1b') && buf.length < 8) {
+        // ESC シーケンス処理
+        if (buf.startsWith('\x1b')) {
           const allSeqs = [...SHIFT_ENTER_SEQS, UP_ARROW, DOWN_ARROW, LEFT_ARROW, RIGHT_ARROW];
-          if (allSeqs.some(s => s.startsWith(buf))) return;
-          // 不明なエスケープシーケンス → ESC をスキップ
-          buf = buf.slice(1);
-          continue;
+          // 既知シーケンスのプレフィックスであれば次のデータを待つ
+          if (buf.length < 8 && allSeqs.some(s => s.startsWith(buf))) return;
+
+          // Delete キー (\x1b[3~) → 末尾 1 文字削除
+          if (buf.startsWith('\x1b[3~')) {
+            buf = buf.slice(4);
+            const line = lines[lines.length - 1];
+            if (line.length > 0) {
+              lines[lines.length - 1] = line.slice(0, -1);
+              process.stdout.write('\b \b');
+            }
+            continue;
+          }
+
+          // CSI シーケンス (\x1b[...) を丸ごとスキップ
+          if (buf.length >= 2 && buf[1] === '[') {
+            let i = 2;
+            // パラメータバイト (0x20–0x3F) を読み飛ばす
+            while (i < buf.length && buf.charCodeAt(i) >= 0x20 && buf.charCodeAt(i) <= 0x3F) i++;
+            if (i >= buf.length) return; // シーケンス未完 → 待機
+            buf = buf.slice(i + 1); // 終端バイトを含めてスキップ
+            continue;
+          }
+
+          // SS3 シーケンス (\x1bO + 1 文字) をスキップ
+          if (buf.length >= 2 && buf[1] === 'O') {
+            if (buf.length < 3) return; // 待機
+            buf = buf.slice(3);
+            continue;
+          }
+
+          // ESC + 1 文字の 2 バイトシーケンスをスキップ
+          if (buf.length >= 2) {
+            buf = buf.slice(2);
+            continue;
+          }
+
+          // ESC のみ受信 → 待機
+          return;
         }
 
         const ch = buf[0];
