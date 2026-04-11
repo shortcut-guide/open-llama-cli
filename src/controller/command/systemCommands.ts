@@ -7,6 +7,7 @@ import { getAutoWrite, setAutoWrite } from '../state/index.js';
 import { callLLM } from '../../model/llm/index.js';
 import { getConfig } from '../../config/index.js';
 import { saveHistory } from '../../model/history/index.js';
+import { getLoadedInstructions } from '../../config/instructions.js';
 import type { CommandContext } from './types.js';
 
 export async function handleAutowriteCommand(trimmed: string): Promise<boolean> {
@@ -98,6 +99,7 @@ export function handleHelpCommand(): boolean {
 │  /rewind                       │ 直前ターンの変更をロールバック   │
 │  /context                      │ トークン使用量を表示             │
 │  /compact                      │ 会話を要約・圧縮                 │
+│  /instructions                 │ 読み込み済み指示ファイル一覧     │
 │  /exit                         │ 終了                             │
 ├────────────────────────────────┼─────────────────────────────────┤
 │  シェル実行                                                        │
@@ -198,6 +200,28 @@ export async function handleCompactCommand(ctx: CommandContext): Promise<boolean
 export function handleExitCommand(): never {
   console.log(chalk.cyan('\n👋 終了します。\n'));
   process.exit(0);
+}
+
+export function handleInstructionsCommand(): boolean {
+  const instructions = getLoadedInstructions();
+  if (instructions.length === 0) {
+    console.log(chalk.gray('\n  ℹ️  カスタム指示ファイルは読み込まれていません。\n'));
+    console.log(chalk.gray('  以下のいずれかのファイルを作成すると自動読み込みされます:'));
+    console.log(chalk.gray('    ~/.lcli/instructions.md'));
+    console.log(chalk.gray('    ./AGENTS.md'));
+    console.log(chalk.gray('    ./CLAUDE.md'));
+    console.log(chalk.gray('    ./.github/copilot-instructions.md\n'));
+    return true;
+  }
+
+  console.log(chalk.cyan(`\n  📋 読み込み済みカスタム指示ファイル (${instructions.length} 件)\n`));
+  for (const { filePath, content } of instructions) {
+    const preview = content.split('\n').slice(0, 3).join('\n');
+    const truncated = content.split('\n').length > 3;
+    console.log(chalk.green(`  ✅ ${filePath}`));
+    console.log(chalk.gray(`     ${preview.replace(/\n/g, '\n     ')}${truncated ? '\n     ...' : ''}\n`));
+  }
+  return true;
 }
 
 export async function handleRewindCommand(): Promise<boolean> {

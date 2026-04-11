@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import * as path from 'node:path';
 
 import { initializeConfig, getConfig } from './config/index.js';
+import { loadInstructions, buildInstructionsPrompt } from './config/instructions.js';
 import { loadHistory, saveHistory } from './model/history/index.js';
 import { loadInputHistory, appendInputHistory } from './model/inputHistory/index.js';
 import { setWorkspaceRoot } from './model/file/index.js';
@@ -40,7 +41,10 @@ async function main(): Promise<void> {
   setWorkspaceRoot(config.WORKSPACE_ROOT);
   setAutoWrite(config.AUTO_WRITE_DEFAULT);
 
-  const fullSystemPrompt = `${config.SYSTEM_PROMPT}
+  const instructions = await loadInstructions(config.WORKSPACE_ROOT);
+  const instructionsPrompt = buildInstructionsPrompt(instructions);
+
+  const fullSystemPrompt = `${config.SYSTEM_PROMPT}${instructionsPrompt}
 【重要指令】
 ファイルを新規作成または上書き更新する場合は、必ず以下の専用マークダウン形式で出力してください：
 
@@ -68,6 +72,9 @@ async function main(): Promise<void> {
   printWorkspaceInfo(config.WORKSPACE_ROOT);
   printAutoWriteStatus(getAutoWrite());
   console.log(chalk.gray(`  📂 セッション: ${currentSession.name}  [${currentSession.id.slice(0, 8)}]`));
+  if (instructions.length > 0) {
+    console.log(chalk.gray(`  📋 カスタム指示: ${instructions.length} ファイル読み込み済み (/instructions で確認)`));
+  }
   await printGsdStatusIfActive();
   printHint();
 

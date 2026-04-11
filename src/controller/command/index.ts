@@ -20,6 +20,7 @@ import {
   handleRewindCommand,
   handleContextCommand,
   handleCompactCommand,
+  handleInstructionsCommand,
 } from './systemCommands.js';
 import { handleShellCommand } from './shellCommand.js';
 import { handleDiffCommand } from './diffCommand.js';
@@ -67,6 +68,7 @@ export async function handleCommand(
   if (trimmed === '/rewind')              return handleRewindCommand();
   if (trimmed === '/context')             return handleContextCommand(ctx);
   if (trimmed === '/compact')             return handleCompactCommand(ctx);
+  if (trimmed === '/instructions')        return handleInstructionsCommand();
   if (trimmed === '/help')                return handleHelpCommand();
   if (trimmed === '/terminal-setup')      return handleTerminalSetupCommand();
   if (trimmed === '/exit' || trimmed === '/quit') handleExitCommand();
