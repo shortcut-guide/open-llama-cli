@@ -20,6 +20,7 @@ import {
 } from './controller/command/index.js';
 import { handleFileEditProposals } from './controller/fileProposal/index.js';
 import { readUserInput } from './controller/multilineInput/index.js';
+import { getTokenUsage } from './model/history/index.js';
 import {
   printBanner,
   printAutoWriteStatus,
@@ -117,6 +118,11 @@ async function main(): Promise<void> {
       history.push({ role: 'assistant', content: assistantMessage });
 
       await saveHistory(history);
+
+      const tokenUsage = getTokenUsage(history, config.MAX_TOKENS);
+      if (tokenUsage.usagePercent >= 80) {
+        console.log(chalk.yellow(`  ⚠️  コンテキスト使用率: ${tokenUsage.usagePercent}% (${tokenUsage.totalTokens.toLocaleString()}/${tokenUsage.maxTokens.toLocaleString()} トークン) — /compact で圧縮できます`));
+      }
 
       await handleFileEditProposals(
         assistantMessage,

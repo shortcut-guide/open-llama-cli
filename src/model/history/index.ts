@@ -4,6 +4,34 @@ import * as path from 'node:path';
 import chalk from 'chalk';
 import type { Message } from '../llm/index.js';
 
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+export interface TokenUsage {
+  systemTokens: number;
+  historyTokens: number;
+  totalTokens: number;
+  maxTokens: number;
+  usagePercent: number;
+}
+
+export function getTokenUsage(history: Message[], maxTokens: number): TokenUsage {
+  const systemMsg = history.find(m => m.role === 'system');
+  const systemTokens = systemMsg ? estimateTokens(systemMsg.content) : 0;
+  const historyTokens = history
+    .filter(m => m.role !== 'system')
+    .reduce((sum, m) => sum + estimateTokens(m.content), 0);
+  const totalTokens = systemTokens + historyTokens;
+  return {
+    systemTokens,
+    historyTokens,
+    totalTokens,
+    maxTokens,
+    usagePercent: Math.round((totalTokens / maxTokens) * 100),
+  };
+}
+
 const HISTORY_FILE = path.join(process.cwd(), 'chat_history.json');
 
 export async function loadHistory(systemPrompt: string): Promise<Message[]> {

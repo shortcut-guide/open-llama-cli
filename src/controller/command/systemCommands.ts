@@ -1,9 +1,13 @@
 // src/controller/command/systemCommands.ts
 import chalk from 'chalk';
 
-import { clearHistory, rewindHistory } from '../../model/history/index.js';
+import { clearHistory, rewindHistory, getTokenUsage } from '../../model/history/index.js';
 import { popFromStack, restoreBackup, getStackSize } from '../../model/backup/index.js';
 import { getAutoWrite, setAutoWrite } from '../state/index.js';
+import { callLLM } from '../../model/llm/index.js';
+import { getConfig } from '../../config/index.js';
+import { saveHistory } from '../../model/history/index.js';
+import type { CommandContext } from './types.js';
 
 export async function handleAutowriteCommand(trimmed: string): Promise<boolean> {
   const arg = trimmed.slice(10).trim().toLowerCase();
@@ -86,6 +90,8 @@ export function handleHelpCommand(): boolean {
 │  /delete <path>                │ ファイル削除（確認あり）          │
 │  /clear                        │ チャット履歴をクリア             │
 │  /rewind                       │ 直前ターンの変更をロールバック   │
+│  /context                      │ トークン使用量を表示             │
+│  /compact                      │ 会話を要約・圧縮                 │
 │  /exit                         │ 終了                             │
 ├────────────────────────────────┼─────────────────────────────────┤
 │  シェル実行                                                        │
@@ -101,6 +107,85 @@ export function handleHelpCommand(): boolean {
 │  /diff [--staged] [--review]  │ git diff をカラー表示・AIレビュー│
 └────────────────────────────────┴─────────────────────────────────┘
   自動書き込み現在: `) + autoStatus + '\n');
+  return true;
+}
+
+export function handleContextCommand(ctx: CommandContext): boolean {
+  const config = getConfig();
+  const usage = getTokenUsage(ctx.history, config.MAX_TOKENS);
+
+  const BAR_WIDTH = 40;
+  const filled = Math.round((usage.usagePercent / 100) * BAR_WIDTH);
+  const empty = BAR_WIDTH - filled;
+  const barFill = '█'.repeat(filled) + '░'.repeat(empty);
+  const barColor =
+    usage.usagePercent >= 80 ? chalk.red :
+    usage.usagePercent >= 60 ? chalk.yellow :
+    chalk.green;
+
+  console.log(chalk.cyan('\n  📊 コンテキストウィンドウ使用状況'));
+  console.log(chalk.gray('  ─────────────────────────────────────────'));
+  console.log(`  システムプロンプト : ${chalk.white(usage.systemTokens.toLocaleString())} トークン`);
+  console.log(`  会話履歴           : ${chalk.white(usage.historyTokens.toLocaleString())} トークン`);
+  console.log(`  合計               : ${chalk.white(usage.totalTokens.toLocaleString())} / ${usage.maxTokens.toLocaleString()} トークン`);
+  console.log(`\n  [${barColor(barFill)}] ${barColor(usage.usagePercent + '%')}\n`);
+
+  if (usage.usagePercent >= 80) {
+    console.log(chalk.red('  ⚠️  使用率が80%を超えています。/compact で圧縮することをお勧めします。\n'));
+  }
+  return true;
+}
+
+export async function handleCompactCommand(ctx: CommandContext): Promise<boolean> {
+  const config = getConfig();
+  const usage = getTokenUsage(ctx.history, config.MAX_TOKENS);
+
+  console.log(chalk.cyan(`\n  🗜️  会話を圧縮します... (現在 ${usage.totalTokens.toLocaleString()} トークン)`));
+
+  // Backup: save current history to a timestamped file
+  const backupPath = `chat_history.backup.${Date.now()}.json`;
+  try {
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(backupPath, JSON.stringify(ctx.history, null, 2), 'utf-8');
+    console.log(chalk.gray(`  💾 バックアップ保存: ${backupPath}`));
+  } catch {
+    console.log(chalk.yellow('  ⚠️  バックアップの保存に失敗しました。続行します。'));
+  }
+
+  // Build summary prompt from non-system messages
+  const conversationText = ctx.history
+    .filter(m => m.role !== 'system')
+    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+    .join('\n\n');
+
+  if (!conversationText.trim()) {
+    console.log(chalk.gray('  圧縮する会話がありません。\n'));
+    return true;
+  }
+
+  try {
+    console.log(chalk.gray('  要約中...'));
+    const summary = await callLLM(
+      [{ role: 'user', content: `以下の会話を、重要な情報・決定事項・コードの変更点を漏れなく含めて簡潔に要約してください。この要約は今後の会話のコンテキストとして使われます。\n\n${conversationText}` }],
+      { printStream: false, temperature: 0.3 }
+    );
+
+    // Get the original system message
+    const systemMsg = ctx.history.find(m => m.role === 'system');
+
+    // Replace history: keep system prompt + add summary as system message
+    ctx.history.length = 0;
+    if (systemMsg) ctx.history.push(systemMsg);
+    ctx.history.push({ role: 'system', content: `【会話要約】\n${summary}` });
+
+    await saveHistory(ctx.history);
+
+    const newUsage = getTokenUsage(ctx.history, config.MAX_TOKENS);
+    console.log(chalk.green(`  ✅ 圧縮完了: ${usage.totalTokens.toLocaleString()} → ${newUsage.totalTokens.toLocaleString()} トークン\n`));
+  } catch (e: unknown) {
+    console.error(chalk.red(`  ❌ 圧縮に失敗しました: ${(e as Error).message}\n`));
+  }
+
   return true;
 }
 
