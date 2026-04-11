@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { readFileContent } from '../../../model/file.js';
+import { readFileContent } from '../../../model/file/index.js';
 import { getLineCountCache } from '../../fileProposal.js';
 import { setPendingFileContext } from '../../state.js';
 

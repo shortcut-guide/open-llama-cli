@@ -1,7 +1,7 @@
 // src/controller/fileProposal.ts
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
-import { readFileContent, writeFile } from '../model/file.js';
+import { readFileContent, writeFile } from '../model/file/index.js';
 import { type Message } from '../model/llm.js';
 import { extractFileBlocks } from './fileProposal/extractFileBlocks.js';
 import { sanityCheckWrite, SANITY_RATIO } from './fileProposal/sanityCheck.js';

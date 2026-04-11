@@ -1,6 +1,6 @@
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
-import { writeFile } from '../../../model/file.js';
+import { writeFile } from '../../../model/file/index.js';
 
 export async function handleWriteCommand(trimmed: string, rl: readline.Interface): Promise<boolean> {
   const filePath = trimmed.slice(7).trim();

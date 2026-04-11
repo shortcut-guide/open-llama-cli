@@ -1,6 +1,6 @@
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
-import { deleteFile } from '../../../model/file.js';
+import { deleteFile } from '../../../model/file/index.js';
 
 export async function handleDeleteCommand(trimmed: string, rl: readline.Interface): Promise<boolean> {
   const filePath = trimmed.slice(8).trim();

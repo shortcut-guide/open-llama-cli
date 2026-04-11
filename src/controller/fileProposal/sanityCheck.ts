@@ -1,7 +1,7 @@
 // src/controller/sanityCheck.ts
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
-import { readFileContent } from '../../model/file.js';
+import { readFileContent } from '../../model/file/index.js';
 import { getCachedLineCount } from './lineCountCache.js';
 
 export const SANITY_RATIO = 0.5;

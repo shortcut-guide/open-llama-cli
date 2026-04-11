@@ -8,7 +8,7 @@ import * as path from 'node:path';
 
 import { initializeConfig, getConfig } from './config.js';
 import { loadHistory, saveHistory } from './model/history.js';
-import { setWorkspaceRoot } from './model/file.js';
+import { setWorkspaceRoot } from './model/file/index.js';
 import { callLLM, type Message } from './model/llm.js';
 import {
   handleCommand,

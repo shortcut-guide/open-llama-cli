@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { searchFiles } from '../../../model/file.js';
+import { searchFiles } from '../../../model/file/index.js';
 
 export async function handleSearchCommand(trimmed: string): Promise<boolean> {
   const args = trimmed.slice(8).trim();

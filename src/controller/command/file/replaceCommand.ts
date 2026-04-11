@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { replaceLines } from '../../../model/file.js';
+import { replaceLines } from '../../../model/file/index.js';
 
 export async function handleReplaceCommand(trimmed: string): Promise<boolean> {
   const rest = trimmed.slice(9).trim();
