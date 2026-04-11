@@ -1,7 +1,7 @@
 // src/controller/command/gsd/gsdBuiltin.ts
 import chalk from 'chalk';
 import { listGsdCommands } from '../../../model/gsd/index.js';
-import { formatStateDisplay, loadGsdState } from '../../gsdState.js';
+import { formatStateDisplay, loadGsdState } from '../../gsdState/index.js';
 import { printGsdHelp } from './gsdHelp.js';
 
 /**

@@ -1,6 +1,6 @@
 // src/model/agent/gsd/types.ts
 import * as readline from 'node:readline/promises';
-import { type Message } from '../../llm.js';
+import { type Message } from '../../llm/index.js';
 import { type GsdContext } from '../../gsd/index.js';
 
 export type GsdGateResult = 'done' | 'escalated' | 'aborted';

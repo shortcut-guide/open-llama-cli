@@ -1,4 +1,4 @@
-import { callLLM, type Message } from '../../model/llm.js';
+import { callLLM, type Message } from '../../model/llm/index.js';
 import type { AgentContext, AgentResult } from '../types.js';
 import { displayReviewResult } from './displayReview.js';
 import { parseReviewerResponse } from './parseReview.js';

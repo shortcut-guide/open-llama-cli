@@ -1,6 +1,6 @@
 // src/view/display/gsdStatus.ts
 import chalk from 'chalk';
-import { loadGsdState, type GsdWorkflowState, type GsdPhase } from '../../controller/gsdState.js';
+import { loadGsdState, type GsdWorkflowState, type GsdPhase } from '../../controller/gsdState/index.js';
 
 const PHASE_ICON: Record<GsdPhase, string> = {
   idle:      '⚪',

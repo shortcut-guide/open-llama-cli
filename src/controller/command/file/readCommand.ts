@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { readFileContent } from '../../../model/file/index.js';
-import { getLineCountCache } from '../../fileProposal.js';
-import { setPendingFileContext } from '../../state.js';
+import { getLineCountCache } from '../../fileProposal/index.js';
+import { setPendingFileContext } from '../../state/index.js';
 
 export async function handleReadCommand(trimmed: string): Promise<boolean> {
   const filePath = trimmed.slice(6).trim();

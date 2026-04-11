@@ -1,15 +1,15 @@
 // src/orchestrator.ts
 
 import chalk from 'chalk';
-import { getConfig } from './config.js';
+import { getConfig } from '../config/index.js';
 
-import { runAnalyzer } from './agents/analyzer.js';
-import { runPlanner } from './agents/planner.js';
-import { runCoderAgent } from './agents/coder.js';
-import { runReviewerAgent, parseReviewResult } from './agents/reviewer.js';
+import { runAnalyzer } from '../agents/analyzer/index.js';
+import { runPlanner } from '../agents/planner/index.js';
+import { runCoderAgent } from '../agents/coder/index.js';
+import { runReviewerAgent, parseReviewResult } from '../agents/reviewer/index.js';
 
-import type { AgentContext, TaskType, ReviewResult, AgentRole } from './agents/types.js';
-import { extractFileBlocks } from './controller/fileProposal/extractFileBlocks.js';
+import type { AgentContext, TaskType, ReviewResult, AgentRole } from '../agents/types.js';
+import { extractFileBlocks } from '../controller/fileProposal/extractFileBlocks.js';
 
 export interface OrchestratorResult {
   finalCode: string;

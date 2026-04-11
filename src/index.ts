@@ -6,18 +6,18 @@ import chalk from 'chalk';
 import { fileURLToPath } from 'node:url';
 import * as path from 'node:path';
 
-import { initializeConfig, getConfig } from './config.js';
-import { loadHistory, saveHistory } from './model/history.js';
+import { initializeConfig, getConfig } from './config/index.js';
+import { loadHistory, saveHistory } from './model/history/index.js';
 import { setWorkspaceRoot } from './model/file/index.js';
-import { callLLM, type Message } from './model/llm.js';
+import { callLLM, type Message } from './model/llm/index.js';
 import {
   handleCommand,
   getAutoWrite,
   setAutoWrite,
   getPendingFileContext,
   clearPendingFileContext,
-} from './controller/command.js';
-import { handleFileEditProposals } from './controller/fileProposal.js';
+} from './controller/command/index.js';
+import { handleFileEditProposals } from './controller/fileProposal/index.js';
 import {
   printBanner,
   printAutoWriteStatus,

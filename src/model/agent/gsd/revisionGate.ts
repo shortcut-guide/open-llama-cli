@@ -1,7 +1,7 @@
 // src/model/agent/gsd/revisionGate.ts
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
-import { extractFileBlocks } from '../../../controller/fileProposal.js';
+import { extractFileBlocks } from '../../../controller/fileProposal/index.js';
 
 export function assessOutputQuality(output: string, commandName?: string): { pass: boolean; reason?: string } {
   if (!output || output.trim().length < 30) {

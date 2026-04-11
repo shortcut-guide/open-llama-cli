@@ -1,6 +1,6 @@
 // src/controller/chunkFetcher.ts
 import chalk from 'chalk';
-import { callLLM, type Message } from '../../model/llm.js';
+import { callLLM, type Message } from '../../model/llm/index.js';
 
 const RETRY_CHUNK_LINES = 20;
 const MAX_RETRY = 5;

@@ -1,17 +1,17 @@
 // src/controller/fileProposal.ts
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
-import { readFileContent, writeFile } from '../model/file/index.js';
-import { type Message } from '../model/llm.js';
-import { extractFileBlocks } from './fileProposal/extractFileBlocks.js';
-import { sanityCheckWrite, SANITY_RATIO } from './fileProposal/sanityCheck.js';
-import { fetchFileContentInChunks } from './fileProposal/chunkFetcher.js';
-import { getCachedLineCount } from './fileProposal/lineCountCache.js';
+import { readFileContent, writeFile } from '../../model/file/index.js';
+import { type Message } from '../../model/llm/index.js';
+import { extractFileBlocks } from './extractFileBlocks.js';
+import { sanityCheckWrite, SANITY_RATIO } from './sanityCheck.js';
+import { fetchFileContentInChunks } from './chunkFetcher.js';
+import { getCachedLineCount } from './lineCountCache.js';
 
 // lineCountCache の公開 API は lineCountCache.ts から直接 import して使用してください
-export { getLineCountCache, getCachedLineCount, setCachedLineCount } from './fileProposal/lineCountCache.js';
-export { extractFileBlocks } from './fileProposal/extractFileBlocks.js';
-export { sanityCheckWrite } from './fileProposal/sanityCheck.js';
+export { getLineCountCache, getCachedLineCount, setCachedLineCount } from './lineCountCache.js';
+export { extractFileBlocks } from './extractFileBlocks.js';
+export { sanityCheckWrite } from './sanityCheck.js';
 
 export async function handleFileEditProposals(
   assistantMessage: string,

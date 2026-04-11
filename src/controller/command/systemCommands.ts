@@ -1,8 +1,8 @@
 // src/controller/command/systemCommands.ts
 import chalk from 'chalk';
 
-import { clearHistory } from '../../model/history.js';
-import { getAutoWrite, setAutoWrite } from '../state.js';
+import { clearHistory } from '../../model/history/index.js';
+import { getAutoWrite, setAutoWrite } from '../state/index.js';
 
 export async function handleAutowriteCommand(trimmed: string): Promise<boolean> {
   const arg = trimmed.slice(10).trim().toLowerCase();

@@ -1,18 +1,18 @@
 // src/model/agent/gsdAgent.ts
 import chalk from 'chalk';
-import { callLLM, type Message } from '../llm.js';
-import { saveGsdState, commandToPhase } from '../../controller/gsdState.js';
+import { callLLM, type Message } from '../../llm/index.js';
+import { saveGsdState, commandToPhase } from '../../../controller/gsdState/index.js';
 
-export type { GsdGateResult, GsdAgentResult, GsdAgentOptions } from './gsd/types.js';
+export type { GsdGateResult, GsdAgentResult, GsdAgentOptions } from '../gsd/types.js';
 
-import { type GsdAgentOptions, type GsdAgentResult, type GsdGateResult } from './gsd/types.js';
-import { runAbortGate, GsdAbortError } from './gsd/abortGate.js';
-import { runPreflightGate, GsdPreflightError } from './gsd/preflightGate.js';
-import { assessOutputQuality, runEscalationGate } from './gsd/revisionGate.js';
-import { writePlanningBlocks } from './gsd/planningWriter.js';
-import { runInteractiveGsdLoop } from './gsd/interactiveLoop.js';
-import { runDiscussPhaseInteractive } from './gsd/discussPhase.js';
-import { extractPhaseNumber, buildRetryPrompt, isTerminalCommand, printRevisionHeader } from './gsd/utils.js';
+import { type GsdAgentOptions, type GsdAgentResult, type GsdGateResult } from '../gsd/types.js';
+import { runAbortGate, GsdAbortError } from '../gsd/abortGate.js';
+import { runPreflightGate, GsdPreflightError } from '../gsd/preflightGate.js';
+import { assessOutputQuality, runEscalationGate } from '../gsd/revisionGate.js';
+import { writePlanningBlocks } from '../gsd/planningWriter.js';
+import { runInteractiveGsdLoop } from '../gsd/interactiveLoop.js';
+import { runDiscussPhaseInteractive } from '../gsd/discussPhase.js';
+import { extractPhaseNumber, buildRetryPrompt, isTerminalCommand, printRevisionHeader } from '../gsd/utils.js';
 
 /**
  * GSD Agent メイン。

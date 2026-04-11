@@ -1,6 +1,6 @@
 // src/model/llm.ts
 import chalk from 'chalk';
-import { getConfig } from '../config.js';
+import { getConfig } from '../../config/index.js';
 
 export type Message = { role: string; content: string };
 

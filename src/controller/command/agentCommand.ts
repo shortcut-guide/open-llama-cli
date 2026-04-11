@@ -2,13 +2,13 @@
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
 
-import { saveHistory } from '../../model/history.js';
-import { getLineCountCache, handleFileEditProposals } from '../fileProposal.js';
-import { runOrchestrator } from '../../orchestrator.js';
+import { saveHistory } from '../../model/history/index.js';
+import { getLineCountCache, handleFileEditProposals } from '../fileProposal/index.js';
+import { runOrchestrator } from '../../orchestrator/index.js';
 
 import { TaskType, AgentCommand, CommandContext } from './types.js';
-import { getAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state.js';
-import { readMultiline } from '../multilineInput.js';
+import { getAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state/index.js';
+import { readMultiline } from '../multilineInput/index.js';
 
 const VALID_TYPES: TaskType[] = ['new', 'refactor', 'fix', 'extend', 'analyze', 'gsd'];
 

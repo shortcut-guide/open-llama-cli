@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { callLLM, type Message } from '../../model/llm.js';
+import { callLLM, type Message } from '../../model/llm/index.js';
 import type { AgentContext, AgentResult } from '../types.js';
 import { buildFixerUserPrompt, FIXER_SYSTEM_PROMPT } from './prompt.js';
 

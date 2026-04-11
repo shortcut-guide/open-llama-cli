@@ -1,6 +1,6 @@
 // src/model/agent/gsd/abortGate.ts
 import chalk from 'chalk';
-import { loadGsdState, saveGsdState, isBlockingErrorState } from '../../../controller/gsdState.js';
+import { loadGsdState, saveGsdState, isBlockingErrorState } from '../../../controller/gsdState/index.js';
 
 export class GsdAbortError extends Error {
   constructor(msg: string) { super(msg); this.name = 'GsdAbortError'; }

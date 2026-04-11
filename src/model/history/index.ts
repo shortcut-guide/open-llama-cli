@@ -2,7 +2,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import chalk from 'chalk';
-import type { Message } from './llm.js';
+import type { Message } from '../llm/index.js';
 
 const HISTORY_FILE = path.join(process.cwd(), 'chat_history.json');
 

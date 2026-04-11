@@ -1,5 +1,5 @@
-import { callLLM, type Message } from '../../model/llm.js';
-import type { FileAnalysis } from '../analyzer.js';
+import { callLLM, type Message } from '../../model/llm/index.js';
+import type { FileAnalysis } from '../analyzer/index.js';
 import { parsePlannerResponse } from './parsePlan.js';
 import { buildPlannerPrompt } from './prompt.js';
 import type { MacroPlan } from './types.js';

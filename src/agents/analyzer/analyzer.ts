@@ -1,5 +1,5 @@
 // src/agents/analyzer/analyzer.ts
-import { callLLM, type Message } from '../../model/llm.js';
+import { callLLM, type Message } from '../../model/llm/index.js';
 import { type FileAnalysis, isFileAnalysis } from './types.js';
 import { buildAnalyzerPrompt } from './prompt.js';
 import { extractJSON } from './parseOutput.js';

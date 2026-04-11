@@ -1,9 +1,9 @@
 // src/model/agent/gsd/interactiveLoop.ts
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
-import { callLLM, type Message } from '../../llm.js';
+import { callLLM, type Message } from '../../llm/index.js';
 import { type GsdContext, planningFileExists } from '../../gsd/index.js';
-import { saveGsdState, commandToPhase } from '../../../controller/gsdState.js';
+import { saveGsdState, commandToPhase } from '../../../controller/gsdState/index.js';
 import { type GsdAgentResult } from './types.js';
 import { writePlanningBlocks } from './planningWriter.js';
 import { isTerminalCommand, printRevisionHeader } from './utils.js';

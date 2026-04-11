@@ -1,6 +1,6 @@
 // src/model/agent/gsd/planningWriter.ts
 import chalk from 'chalk';
-import { extractFileBlocks } from '../../../controller/fileProposal.js';
+import { extractFileBlocks } from '../../../controller/fileProposal/index.js';
 import { writePlanningFile } from '../../gsd/index.js';
 
 export async function writePlanningBlocks(

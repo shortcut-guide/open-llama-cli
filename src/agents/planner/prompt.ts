@@ -1,4 +1,4 @@
-import type { FileAnalysis } from '../analyzer.js';
+import type { FileAnalysis } from '../analyzer/index.js';
 
 export function buildPlannerPrompt(target: string, code: string, analysis: FileAnalysis): string {
   const functionsJson = JSON.stringify(analysis.functions ?? [], null, 2);

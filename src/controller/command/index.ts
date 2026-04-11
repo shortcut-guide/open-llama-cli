@@ -1,32 +1,32 @@
 // src/controller/command.ts
 import * as readline from 'node:readline/promises';
 
-import { CommandContext } from './command/types.js';
-import { handleAgentCommand } from './command/agentCommand.js';
-import { handleGsdCommand } from './command/gsdCommand.js';
+import { CommandContext } from './types.js';
+import { handleAgentCommand } from './agentCommand.js';
+import { handleGsdCommand } from './gsdCommand.js';
 import {
   handleSearchCommand,
   handleReadCommand,
   handleWriteCommand,
   handleReplaceCommand,
   handleDeleteCommand,
-} from './command/fileCommands.js';
+} from './fileCommands.js';
 import {
   handleAutowriteCommand,
   handleClearCommand,
   handleHelpCommand,
   handleExitCommand,
-} from './command/systemCommands.js';
+} from './systemCommands.js';
 
-export { CommandContext } from './command/types.js';
-export { getAutoWrite, setAutoWrite, getPendingFileContext, clearPendingFileContext } from './state.js';
-export { parseAgentCommand } from './command/agentCommand.js';
-export { parseGsdInput } from './command/gsdCommand.js';
-export type { TaskType, AgentCommand } from './command/types.js';
+export { CommandContext } from './types.js';
+export { getAutoWrite, setAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state/index.js';
+export { parseAgentCommand } from './agentCommand.js';
+export { parseGsdInput } from './gsdCommand.js';
+export type { TaskType, AgentCommand } from './types.js';
 
 // 後方互換: pendingFileContext の直接参照が他ファイルに存在する場合のみ残す
 // 新規コードでは state.ts の関数を使うこと
-export { setPendingFileContext as _setPendingFileContext } from './state.js';
+export { setPendingFileContext as _setPendingFileContext } from '../state/index.js';
 
 export async function handleCommand(
   userInput: string,

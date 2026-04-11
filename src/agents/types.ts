@@ -1,5 +1,5 @@
 // src/agents/types.ts
-import type { Message } from '../model/llm.js';
+import type { Message } from '../model/llm/index.js';
 export type TaskType = 'new' | 'refactor' | 'fix' | 'extend' | 'analyze' | 'gsd';
 
 export interface GsdTask {

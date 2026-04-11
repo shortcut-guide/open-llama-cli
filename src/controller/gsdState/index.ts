@@ -1,6 +1,6 @@
 // src/controller/gsdState.ts
 import * as path from 'node:path';
-import { readPlanningFile, writePlanningFile } from '../model/gsd/index.js';
+import { readPlanningFile, writePlanningFile } from '../../model/gsd/index.js';
 
 // ─── 型定義 ────────────────────────────────────────────────────────────────
 

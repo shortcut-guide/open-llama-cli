@@ -1,4 +1,4 @@
-import type { FileAnalysis } from '../analyzer.js';
+import type { FileAnalysis } from '../analyzer/index.js';
 import type { MacroPlan } from './types.js';
 
 export function parsePlannerResponse(text: string, target: string, analysis: FileAnalysis): MacroPlan {

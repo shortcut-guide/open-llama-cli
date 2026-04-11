@@ -3,10 +3,10 @@ import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
 
 import { loadGsdCommand, resolveGsdContext } from '../../../model/gsd/index.js';
-import { runGsdAgent } from '../../../model/agent/gsdAgent.js';
-import { handleFileEditProposals } from '../../fileProposal.js';
-import { saveHistory } from '../../../model/history.js';
-import { getAutoWrite } from '../../state.js';
+import { runGsdAgent } from '../../../model/agent/gsdAgent/index.js';
+import { handleFileEditProposals } from '../../fileProposal/index.js';
+import { saveHistory } from '../../../model/history/index.js';
+import { getAutoWrite } from '../../state/index.js';
 import { type CommandContext } from '../types.js';
 
 import { parseGsdInput } from './parseGsdInput.js';
