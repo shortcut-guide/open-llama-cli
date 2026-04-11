@@ -123,6 +123,8 @@ export function handleHelpCommand(): boolean {
   │  /mcp add <name> <cmd> [args] │ MCPサーバーを追加                │
   │  /mcp connect <name>          │ MCPサーバーに接続                │
   │  /mcp tools [name]            │ MCPツール一覧を表示              │
+  │  /research <query>            │ GitHub検索で深掘り調査レポート   │
+  │  /research <q> --output <f>   │ 調査レポートをMarkdownに保存     │
 └────────────────────────────────┴─────────────────────────────────┘
   自動書き込み現在: `) + autoStatus + '\n');
   return true;
