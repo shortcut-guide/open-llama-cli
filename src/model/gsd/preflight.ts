@@ -15,6 +15,8 @@ export async function preExecuteGsdToolsInit(
   const initCommands = new Set([
     'plan-phase', 'execute-phase', 'verify-work', 'new-milestone', 'new-project',
     'quick', 'resume', 'resume-work', 'map-codebase', 'progress', 'manager',
+    'audit-milestone', 'complete-milestone', 'pause-work',
+    'add-phase', 'insert-phase', 'remove-phase', 'debug',
   ]);
 
   const phaseArg = phaseNum !== null ? [String(phaseNum)] : [];
@@ -58,6 +60,7 @@ export function isFileWritingCommand(commandName: string): boolean {
     'discuss-phase', 'plan-phase', 'execute-phase', 'research-phase',
     'verify-work', 'new-milestone', 'new-project', 'complete-milestone',
     'fast', 'do', 'quick', 'audit-milestone', 'audit-uat',
+    'map-codebase', 'debug', 'pause-work', 'add-phase', 'insert-phase', 'remove-phase',
   ]);
   return fileWriters.has(commandName);
 }
@@ -115,6 +118,50 @@ export function getPreflightRequirements(commandName: string): PreflightRequirem
         file: 'PROJECT.md',
         missingMessage: 'PROJECT.md が存在しません。',
         suggestion: '/gsd:new-project',
+      },
+    ],
+    'map-codebase': [],
+    'debug': [],
+    'progress': [
+      {
+        file: 'STATE.md',
+        missingMessage: 'STATE.md が存在しません。プロジェクトが初期化されていない可能性があります。',
+        suggestion: '/gsd:new-project',
+      },
+    ],
+    'pause-work': [
+      {
+        file: 'STATE.md',
+        missingMessage: 'STATE.md が存在しません。進行中の作業が見つかりません。',
+        suggestion: '/gsd:new-project',
+      },
+    ],
+    'resume-work': [
+      {
+        file: 'STATE.md',
+        missingMessage: 'STATE.md が存在しません。再開できる作業が見つかりません。',
+        suggestion: '/gsd:new-project',
+      },
+    ],
+    'add-phase': [
+      {
+        file: 'ROADMAP.md',
+        missingMessage: 'ROADMAP.md が存在しません。',
+        suggestion: '/gsd:new-project または /gsd:new-milestone',
+      },
+    ],
+    'insert-phase': [
+      {
+        file: 'ROADMAP.md',
+        missingMessage: 'ROADMAP.md が存在しません。',
+        suggestion: '/gsd:new-project または /gsd:new-milestone',
+      },
+    ],
+    'remove-phase': [
+      {
+        file: 'ROADMAP.md',
+        missingMessage: 'ROADMAP.md が存在しません。',
+        suggestion: '/gsd:new-project または /gsd:new-milestone',
       },
     ],
     'next': [
