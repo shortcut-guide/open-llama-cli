@@ -96,6 +96,7 @@ export function handleHelpCommand(): boolean {
 │  複数行ペースト                │ そのまま貼り付け可能             │
 │  Ctrl+U                        │ 現在行をクリア                   │
 │  /terminal-setup               │ 端末設定の案内を表示             │
+│  /diff [--staged] [--review]  │ git diff をカラー表示・AIレビュー│
 └────────────────────────────────┴─────────────────────────────────┘
   自動書き込み現在: `) + autoStatus + '\n');
   return true;

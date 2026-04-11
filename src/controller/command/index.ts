@@ -19,6 +19,7 @@ import {
   handleTerminalSetupCommand,
 } from './systemCommands.js';
 import { handleShellCommand } from './shellCommand.js';
+import { handleDiffCommand } from './diffCommand.js';
 
 export { CommandContext } from './types.js';
 export { getAutoWrite, setAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state/index.js';
@@ -50,6 +51,7 @@ export async function handleCommand(
   if (trimmed.startsWith('/write '))      return handleWriteCommand(trimmed, rl);
   if (trimmed.startsWith('/replace '))    return handleReplaceCommand(trimmed);
   if (trimmed.startsWith('/delete '))     return handleDeleteCommand(trimmed, rl);
+  if (trimmed.startsWith('/diff'))         return handleDiffCommand(trimmed, ctx);
   if (trimmed === '/clear')               return handleClearCommand();
   if (trimmed === '/help')                return handleHelpCommand();
   if (trimmed === '/terminal-setup')      return handleTerminalSetupCommand();
