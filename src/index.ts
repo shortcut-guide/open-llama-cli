@@ -18,6 +18,7 @@ import {
   clearPendingFileContext,
 } from './controller/command/index.js';
 import { handleFileEditProposals } from './controller/fileProposal/index.js';
+import { readUserInput } from './controller/multilineInput/index.js';
 import {
   printBanner,
   printAutoWriteStatus,
@@ -66,7 +67,7 @@ async function main(): Promise<void> {
   const history: Message[] = await loadHistory(fullSystemPrompt);
 
   while (true) {
-    const userInput = await rl.question(chalk.blue('You: '));
+    const userInput = await readUserInput(chalk.blue('You: '));
     if (!userInput.trim()) continue;
 
     // ✅ コマンド処理（/agent含む）

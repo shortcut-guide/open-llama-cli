@@ -16,6 +16,7 @@ import {
   handleClearCommand,
   handleHelpCommand,
   handleExitCommand,
+  handleTerminalSetupCommand,
 } from './systemCommands.js';
 import { handleShellCommand } from './shellCommand.js';
 
@@ -51,6 +52,7 @@ export async function handleCommand(
   if (trimmed.startsWith('/delete '))     return handleDeleteCommand(trimmed, rl);
   if (trimmed === '/clear')               return handleClearCommand();
   if (trimmed === '/help')                return handleHelpCommand();
+  if (trimmed === '/terminal-setup')      return handleTerminalSetupCommand();
   if (trimmed === '/exit' || trimmed === '/quit') handleExitCommand();
 
   return false;
