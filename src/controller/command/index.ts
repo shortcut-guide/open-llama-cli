@@ -30,6 +30,7 @@ import {
   handleRenameCommand,
 } from './sessionCommands.js';
 import { handleLspCommand } from './lspCommand.js';
+import { handleMcpCommand } from './mcpCommand.js';
 
 export { CommandContext } from './types.js';
 export { getAutoWrite, setAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state/index.js';
@@ -74,6 +75,7 @@ export async function handleCommand(
   if (trimmed === '/terminal-setup')      return handleTerminalSetupCommand();
   if (trimmed === '/exit' || trimmed === '/quit') handleExitCommand();
   if (trimmed.startsWith('/lsp'))              return handleLspCommand(trimmed);
+  if (trimmed.startsWith('/mcp'))              return handleMcpCommand(trimmed);
 
   return false;
 }
