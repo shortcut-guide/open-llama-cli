@@ -20,7 +20,7 @@ export function printWorkspaceInfo(workspaceRoot: string): void {
 export function printHint(): void {
   console.log(
     chalk.gray(
-      '  "/help" でコマンド一覧 | "/gsd:help" でGSDコマンド一覧 | "/agent <task>" でMulti-Agentモード\n'
+      '  "/help" でコマンド一覧 | "/gsd:help" でGSDコマンド一覧 | "/agent <task>" でMulti-Agentモード | Ctrl+G で外部エディタ\n'
     )
   );
 }

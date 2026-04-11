@@ -1,5 +1,9 @@
 // src/controller/multilineInput/index.ts
 import chalk from 'chalk';
+import * as os from 'node:os';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const UP_ARROW   = '\x1b[A';
 const DOWN_ARROW = '\x1b[B';
@@ -200,6 +204,52 @@ export async function readUserInput(prompt: string, inputHistory: string[] = [])
           const line = lines[lines.length - 1];
           process.stdout.write('\b \b'.repeat(line.length));
           lines[lines.length - 1] = '';
+          continue;
+        }
+
+        // Ctrl+G – 外部エディタでプロンプトを編集
+        if (ch === '\x07') {
+          const tmpFile = path.join(os.tmpdir(), `lcli-prompt-${Date.now()}.txt`);
+          const currentContent = lines.join('\n');
+          try {
+            fs.writeFileSync(tmpFile, currentContent, 'utf8');
+
+            // ターミナルを通常モードに戻してエディタを起動
+            process.stdout.write('\x1b[?2004l');
+            process.stdin.setRawMode(false);
+            process.stdin.removeListener('data', onData);
+
+            const editorEnv = process.env.EDITOR || 'nano';
+            const editorParts = editorEnv.split(/\s+/);
+            const editorCmd = editorParts[0];
+            const editorExtraArgs = editorParts.slice(1);
+            // VS Code は --wait がないと即終了するため自動付与
+            if ((editorCmd === 'code' || editorCmd.endsWith('/code')) && !editorExtraArgs.includes('--wait')) {
+              editorExtraArgs.unshift('--wait');
+            }
+
+            spawnSync(editorCmd, [...editorExtraArgs, tmpFile], { stdio: 'inherit' });
+
+            // 編集結果を読み込み（末尾の改行は除去）
+            const newContent = fs.readFileSync(tmpFile, 'utf8').replace(/\n$/, '');
+            fs.unlinkSync(tmpFile);
+
+            // lines を新しい内容で置き換え
+            const newLines = newContent.split('\n');
+            lines.splice(0, lines.length, ...(newLines.length > 0 ? newLines : ['']));
+          } catch {
+            // エディタ起動失敗時は現在の入力を維持
+          }
+
+          // ターミナルを raw モードに戻し、プロンプトと内容を再描画
+          process.stdout.write('\x1b[?2004h');
+          process.stdin.setRawMode(true);
+          process.stdin.on('data', onData);
+
+          process.stdout.write(prompt + lines[0]);
+          for (let i = 1; i < lines.length; i++) {
+            process.stdout.write('\n' + chalk.gray('  > ') + lines[i]);
+          }
           continue;
         }
 
