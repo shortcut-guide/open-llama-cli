@@ -1,5 +1,5 @@
 // src/model/agent/gsd/preflightGate.ts
-import { getPreflightRequirements, listPlanningFiles, planningFileExists } from '../../gsd.js';
+import { getPreflightRequirements, listPlanningFiles, planningFileExists } from '../../gsd/index.js';
 
 export class GsdPreflightError extends Error {
   constructor(msg: string, public readonly suggestion: string) {

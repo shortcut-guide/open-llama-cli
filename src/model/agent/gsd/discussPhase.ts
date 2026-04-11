@@ -2,7 +2,7 @@
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
 import { callLLM, type Message } from '../../llm.js';
-import { type GsdContext } from '../../gsd.js';
+import { type GsdContext } from '../../gsd/index.js';
 import { type GsdAgentResult } from './types.js';
 import { writePlanningBlocks } from './planningWriter.js';
 import { printRevisionHeader } from './utils.js';

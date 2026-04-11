@@ -1,6 +1,6 @@
 // src/controller/command/gsd/gsdHelp.ts
 import chalk from 'chalk';
-import { listGsdCommands } from '../../../model/gsd.js';
+import { listGsdCommands } from '../../../model/gsd/index.js';
 
 export async function printGsdHelp(): Promise<void> {
   console.log(chalk.bold.cyan('\n📋 GSD コマンド一覧\n'));

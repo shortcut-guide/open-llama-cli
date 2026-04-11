@@ -2,7 +2,7 @@
 import * as readline from 'node:readline/promises';
 import chalk from 'chalk';
 
-import { loadGsdCommand, resolveGsdContext } from '../../../model/gsd.js';
+import { loadGsdCommand, resolveGsdContext } from '../../../model/gsd/index.js';
 import { runGsdAgent } from '../../../model/agent/gsdAgent.js';
 import { handleFileEditProposals } from '../../fileProposal.js';
 import { saveHistory } from '../../../model/history.js';
