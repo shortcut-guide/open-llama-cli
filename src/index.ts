@@ -24,7 +24,7 @@ import {
   printWorkspaceInfo,
   printHint,
   printGsdStatusIfActive,
-} from './view/display.js';
+} from './view/display/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
