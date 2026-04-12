@@ -18,15 +18,35 @@ export interface OrchestratorResult {
 }
 
 /**
- * エージェントの役割に基づいてLLM URLを解決する
+ * Gemmaエンドポイントが起動しているか確認する（タイムアウト付き）
  */
-function resolveModelUrl(role: AgentRole): string {
+async function isGemmaAvailable(): Promise<boolean> {
+  const config = getConfig();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(config.LLM_GEMMA_URL, {
+      method: 'HEAD',
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+    // 接続できれば（HTTPエラーでも）起動していると判断
+    return res.status < 500 || res.status >= 200;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * エージェントの役割に基づいてLLM URLを解決する
+ * gemmaAvailable=false の場合は analyzer/planner/coder も bonsai へフォールバック
+ */
+function resolveModelUrl(role: AgentRole, gemmaAvailable: boolean): string {
   const config = getConfig();
   switch (role) {
     case 'analyzer':
     case 'planner':
     case 'coder':
-      return config.LLM_GEMMA_URL;
+      return gemmaAvailable ? config.LLM_GEMMA_URL : config.LLM_BONSAI_URL;
     case 'reviewer':
     case 'fixer':
       return config.LLM_BONSAI_URL;
@@ -83,13 +103,19 @@ export async function runOrchestrator(
   console.log(chalk.bold.cyan('║  🎯 Orchestrator (Macro Pipeline)   ║'));
   console.log(chalk.bold.cyan('╚══════════════════════════════════════╝'));
 
+  // Gemmaが起動しているか確認し、未起動の場合はBonsaiにフォールバック
+  const gemmaAvailable = await isGemmaAvailable();
+  if (!gemmaAvailable) {
+    console.log(chalk.yellow('  ⚠️  Gemma is not available — routing analyzer/planner/coder to Bonsai.'));
+  }
+
   /**
    * Step 1: Analyzer (ソースコードの事実解析)
    */
   const analysis = await runAnalyzer({
     code,
     filePath,
-    llmUrl: resolveModelUrl('analyzer'),
+    llmUrl: resolveModelUrl('analyzer', gemmaAvailable),
   });
 
   /**
@@ -100,7 +126,7 @@ export async function runOrchestrator(
     target: userTask,
     code: code,
     analysis: analysis,
-    llmUrl: resolveModelUrl('planner'),
+    llmUrl: resolveModelUrl('planner', gemmaAvailable),
   });
 
   let finalCode = '';
@@ -121,7 +147,7 @@ export async function runOrchestrator(
       plan: JSON.stringify(plan),
       sourceCode: code,
       sourcePath: analysis.path,
-      llmUrl: resolveModelUrl('coder'),
+      llmUrl: resolveModelUrl('coder', gemmaAvailable),
     };
 
     let coderResult = await runCoderAgent(ctx);
@@ -151,7 +177,7 @@ export async function runOrchestrator(
         agentRole: 'reviewer',
         code: codeOutput,
         reviewResult: currentReviewResult,
-        llmUrl: resolveModelUrl('reviewer'),
+        llmUrl: resolveModelUrl('reviewer', gemmaAvailable),
       });
 
       // レビューJSONの解析
