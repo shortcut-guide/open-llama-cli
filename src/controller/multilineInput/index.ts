@@ -41,10 +41,22 @@ export async function readUserInput(prompt: string, inputHistory: string[] = [])
     let historyIdx = inputHistory.length; // 末尾+1を指すことで「未選択」
     let savedInput = '';                  // 履歴を遡る前の入力内容
 
+    /** プロンプト文字列の表示上の文字数（ANSIコードを除外） */
+    const promptVisualLen = prompt.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').length;
+
     /** 現在行の表示を newText で置き換える（シングルライン時のみ） */
     const replaceCurrentLine = (newText: string) => {
       const current = lines[lines.length - 1];
-      process.stdout.write('\b \b'.repeat(current.length));
+      const cols = process.stdout.columns || 80;
+      // プロンプト + テキストが折り返す行数を算出
+      const wrappedLines = Math.max(1, Math.ceil((promptVisualLen + current.length) / cols));
+      if (wrappedLines > 1) {
+        // 折り返し分だけカーソルを上に移動
+        process.stdout.write(`\x1b[${wrappedLines - 1}A`);
+      }
+      // 行頭へ戻しカーソル以降をすべて消去してからプロンプトと新テキストを再描画
+      process.stdout.write('\r\x1b[J');
+      process.stdout.write(prompt);
       lines[lines.length - 1] = newText;
       process.stdout.write(newText);
     };
