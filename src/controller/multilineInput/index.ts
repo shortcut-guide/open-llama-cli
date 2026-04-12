@@ -305,10 +305,14 @@ export async function readUserInput(prompt: string, inputHistory: string[] = [])
 export async function readMultiline(rl: import('node:readline/promises').Interface): Promise<string> {
   return new Promise((resolve) => {
     console.log(chalk.gray("\n📝 複数行入力モード（/end で送信）\n"));
+    // readUserInput の cleanup が stdin を pause するため、readline が
+    // 'line' イベントを受け取れるよう resume する
+    process.stdin.resume();
     const lines: string[] = [];
     rl.on('line', (line) => {
       if (line.trim() === '/end') {
         rl.removeAllListeners('line');
+        process.stdin.pause();
         resolve(lines.join('\n'));
       } else {
         lines.push(line);
