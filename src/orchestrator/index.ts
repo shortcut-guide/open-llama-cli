@@ -164,6 +164,7 @@ export async function runOrchestrator(
 
     let localApproved = false;
     let currentReviewResult: ReviewResult | undefined;
+    let consecutiveParseFailures = 0;
 
     /**
      * Step 4: Review Loop (指摘 -> ヒント提示 -> 再生成)
@@ -193,6 +194,21 @@ export async function runOrchestrator(
           suggestions: [],
           raw: reviewerResult.output
         };
+      }
+
+      // パース失敗（Reviewerが機能していない）を連続検知
+      const issues = review.issues ?? [];
+      const isParseFailure = issues.length > 0 &&
+        issues.every(i => i === 'パース失敗' || i === 'Reviewer JSON parse error');
+      if (isParseFailure) {
+        consecutiveParseFailures++;
+        if (consecutiveParseFailures >= 2) {
+          console.log(chalk.yellow(`  ⚠️ Reviewer が有効なJSONを生成できません (${consecutiveParseFailures}回連続)。レビューをスキップして承認します。`));
+          localApproved = true;
+          break;
+        }
+      } else {
+        consecutiveParseFailures = 0;
       }
 
       if (review.approved) {

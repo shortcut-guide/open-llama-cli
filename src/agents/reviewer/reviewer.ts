@@ -23,6 +23,8 @@ export async function runReviewerAgent(ctx: AgentContext): Promise<AgentResult> 
   const raw = await callLLM(messages, {
     printStream: false,
     llmUrl: ctx.llmUrl,
+    temperature: 0.1,
+    maxTokens: 1024,
   });
 
   const reviewResult = parseReviewerResponse(raw);
