@@ -92,7 +92,7 @@ function handleIssueView(issueNumber: string): void {
     `URL: ${issue.url}`,
     '',
     '### 内容',
-    issue.body ?? '（本文なし）',
+    issue.body || '（本文なし）',
   ].filter(line => line !== null).join('\n');
 
   setPendingFileContext(contextText);
