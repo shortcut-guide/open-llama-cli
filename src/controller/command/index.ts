@@ -35,6 +35,7 @@ import { handleReviewCommand } from './reviewCommand.js';
 import { handlePrCommand } from './prCommand.js';
 import { handleShareCommand } from './shareCommand.js';
 import { handleResearchCommand } from './researchCommand.js';
+import { handleIssueCommand } from './issueCommand.js';
 
 export { CommandContext } from './types.js';
 export { getAutoWrite, setAutoWrite, getPendingFileContext, clearPendingFileContext } from '../state/index.js';
@@ -84,6 +85,7 @@ export async function handleCommand(
   if (trimmed.startsWith('/pr'))               return handlePrCommand(trimmed, rl);
   if (trimmed.startsWith('/share'))            return handleShareCommand(trimmed, ctx);
   if (trimmed.startsWith('/research'))         return handleResearchCommand(trimmed);
+  if (trimmed.startsWith('/issue'))            return handleIssueCommand(trimmed);
 
   return false;
 }

@@ -125,6 +125,8 @@ export function handleHelpCommand(): boolean {
   │  /mcp tools [name]            │ MCPツール一覧を表示              │
   │  /research <query>            │ GitHub検索で深掘り調査レポート   │
   │  /research <q> --output <f>   │ 調査レポートをMarkdownに保存     │
+  │  /issue list                  │ オープンなIssue一覧を表示        │
+  │  /issue <番号>                │ Issue読み込み+次発言へ注入       │
 └────────────────────────────────┴─────────────────────────────────┘
   自動書き込み現在: `) + autoStatus + '\n');
   return true;
