@@ -12,8 +12,9 @@ export const REVIEWER_SYSTEM_PROMPT = `You are a strict and helpful senior TypeS
 5. Export Completeness: All symbols that other modules depend on must be exported.
 6. Quality: Code is clean, efficient, and follows TypeScript best practices.
 
-【OUTPUT FORMAT (STRICT JSON ONLY — NO PROSE BEFORE OR AFTER)】
-Output exactly one JSON object:
+【OUTPUT FORMAT — STRICT JSON ONLY】
+Your entire response MUST be a single raw JSON object. Do NOT include any prose, explanation, markdown, or code fences before or after the JSON. Start your response with { and end with }.
+
 {
   "approved": boolean,
   "issues": ["concise description of each blocking issue"],
