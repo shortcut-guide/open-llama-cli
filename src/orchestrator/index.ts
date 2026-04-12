@@ -29,8 +29,8 @@ async function isGemmaAvailable(): Promise<boolean> {
       method: 'HEAD',
       signal: controller.signal,
     }).finally(() => clearTimeout(timer));
-    // 接続できれば（HTTPエラーでも）起動していると判断
-    return res.status < 500 || res.status >= 200;
+    // 2xx〜4xx なら起動していると判断。5xx (502/503 等) は未起動とみなす
+    return res.status >= 200 && res.status < 500;
   } catch {
     return false;
   }
