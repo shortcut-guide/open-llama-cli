@@ -69,9 +69,14 @@ async function main(): Promise<void> {
   // Initialize session (migrate legacy chat_history.json if present)
   const currentSession = await initSession(fullSystemPrompt);
 
+  // terminal: false を指定して readline 自身のエコー処理を無効化する。
+  // readUserInput が raw モードで手動エコーするため、terminal: true のままだと
+  // 同じ文字が二重表示されるバグ（例: /clear → //cclleeaarr）が発生する。
+  // rl.question() 呼び出し時は raw モードが解除されており OS 側がエコーするため問題なし。
   const rl = readline.createInterface({
     input,
     output,
+    terminal: false,
   });
 
   printBanner();
