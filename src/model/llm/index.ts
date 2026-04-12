@@ -39,7 +39,13 @@ export async function callLLM(
   });
 
   if (!response.ok) {
-    throw new Error(`LLM API Error: ${response.status} ${await response.text()}`);
+    const contentType = response.headers.get('content-type') ?? '';
+    const body = await response.text();
+    const isHtml = contentType.includes('text/html') || body.trimStart().startsWith('<');
+    const detail = isHtml
+      ? `(HTMLレスポンス — エンドポイントが正常に応答していません)`
+      : body.slice(0, 200);
+    throw new Error(`LLM API Error: ${response.status} ${detail}\n  URL: ${url}`);
   }
 
   const reader = response.body?.getReader();

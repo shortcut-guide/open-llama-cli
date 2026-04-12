@@ -48,7 +48,10 @@ export async function printGsdStatusIfActive(): Promise<void> {
   if (state.phase === 'error') {
     console.log(chalk.red(line));
     if (state.errorMessage) {
-      console.log(chalk.red(`     ${state.errorMessage}`));
+      // 長いエラーメッセージを1行に収める（HTMLダンプなどの対策）
+      const firstLine = state.errorMessage.split('\n')[0].slice(0, 120);
+      const truncated = firstLine.length < state.errorMessage.split('\n')[0].length ? `${firstLine}…` : firstLine;
+      console.log(chalk.red(`     ${truncated}`));
     }
   } else {
     console.log(chalk.cyan(line));
