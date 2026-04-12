@@ -27,15 +27,27 @@ export async function callLLM(
     : history;
 
   const url = options.llmUrl || config.LLM_API_URL;
+  const isChatEndpoint = url.includes('/chat/completions');
+
+  // /v1/completions は prompt 形式、/v1/chat/completions は messages 形式
+  const body = isChatEndpoint
+    ? {
+        messages,
+        temperature: options.temperature ?? config.TEMPERATURE,
+        max_tokens: options.maxTokens ?? config.MAX_TOKENS,
+        stream: true,
+      }
+    : {
+        prompt: messages.map(m => `${m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System'}: ${m.content}`).join('\n') + '\nAssistant:',
+        temperature: options.temperature ?? config.TEMPERATURE,
+        max_tokens: options.maxTokens ?? config.MAX_TOKENS,
+        stream: true,
+      };
+
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messages: messages,
-      temperature: options.temperature ?? config.TEMPERATURE,
-      max_tokens: options.maxTokens ?? config.MAX_TOKENS,
-      stream: true,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -71,7 +83,8 @@ export async function callLLM(
         if (dataStr === '[DONE]') continue;
         try {
           const json = JSON.parse(dataStr);
-          const content = json.choices[0]?.delta?.content || '';
+          // /chat/completions: delta.content, /completions: text
+          const content = json.choices[0]?.delta?.content ?? json.choices[0]?.text ?? '';
           if (content) {
             fullContent += content;
             if (printStream) process.stdout.write(content);
