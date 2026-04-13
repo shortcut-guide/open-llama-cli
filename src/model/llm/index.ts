@@ -38,7 +38,15 @@ export async function callLLM(
         stream: true,
       }
     : {
-        prompt: messages.map(m => `${m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System'}: ${m.content}`).join('\n') + '\nAssistant:',
+        // completions 形式では system ロールを理解できないモデルが多いため、
+        // system メッセージをインストラクションとして user ターンの先頭に結合する
+        prompt: (() => {
+          const systemParts = messages.filter(m => m.role === 'system').map(m => m.content);
+          const nonSystem = messages.filter(m => m.role !== 'system');
+          const instruction = systemParts.length > 0 ? systemParts.join('\n') + '\n\n' : '';
+          const conversation = nonSystem.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
+          return instruction + conversation + '\nAssistant:';
+        })(),
         temperature: options.temperature ?? config.TEMPERATURE,
         max_tokens: options.maxTokens ?? config.MAX_TOKENS,
         stream: true,
